@@ -124,6 +124,11 @@ export function IndicatorsOverviewPage() {
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
   };
 
+  const categoryOptions = useMemo(() => {
+    const distinct = Array.from(new Set(rows.map((r) => r.category)));
+    return [{ value: '전체', label: '전체' }, ...distinct.map((c) => ({ value: c, label: c }))];
+  }, [rows]);
+
   const csvHeaders = [
     '지표ID', '연도', '구분', '지표명', '단위', '목표값', '실적값', '달성률', '상태', '증빙', '비고', '수정일',
   ];
@@ -146,7 +151,7 @@ export function IndicatorsOverviewPage() {
             label="지표구분"
             value={category}
             onChange={setCategory}
-            options={[{ value: '전체', label: '전체' }, { value: '핵심', label: '핵심' }, { value: '자율', label: '자율' }]}
+            options={categoryOptions}
           />
           <FilterSelect
             label="대학명"

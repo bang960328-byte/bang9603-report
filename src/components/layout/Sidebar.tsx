@@ -2,8 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   ListChecks,
-  Star,
-  Sparkles,
+  Layers,
   Building2,
   AlertTriangle,
   Target,
@@ -23,8 +22,7 @@ interface MenuItem {
 const MENU_ITEMS: MenuItem[] = [
   { to: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { to: '/indicators', label: '성과지표 총괄 현황', icon: ListChecks },
-  { to: '/indicators/core', label: '핵심 성과지표', icon: Star },
-  { to: '/indicators/autonomous', label: '자율 성과지표', icon: Sparkles },
+  { to: '/indicators/detail', label: '지표 대분류별 상세', icon: Layers },
   { to: '/university-results', label: '대학별 배부·달성 관리', icon: Building2 },
   { to: '/priority', label: '우선 관리 지표', icon: AlertTriangle },
   { to: '/targets', label: '목표값 설정', icon: Target, adminOnly: true },

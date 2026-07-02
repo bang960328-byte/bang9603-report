@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ListChecks, Star, Sparkles, Gauge, AlertTriangle, FileWarning } from 'lucide-react';
+import { ListChecks, Layers, Gauge, AlertTriangle, FileWarning } from 'lucide-react';
 import { StatCard } from '@/components/common/StatCard';
 import { Card } from '@/components/common/Card';
 import { ProgressBar } from '@/components/common/ProgressBar';
@@ -7,6 +7,7 @@ import { RiskBadge } from '@/components/common/StatusBadge';
 import { UniversityComparisonChart } from '@/components/charts/UniversityComparisonChart';
 import { IndicatorRankingChart } from '@/components/charts/IndicatorRankingChart';
 import { EvidenceStatusChart } from '@/components/charts/EvidenceStatusChart';
+import { CategoryBreakdownChart } from '@/components/charts/CategoryBreakdownChart';
 import { getDashboardData, getPriorityIndicators } from '@/services/api';
 import type { DashboardData, PriorityIndicator } from '@/types';
 import { formatNumber, formatRate } from '@/utils/format';
@@ -36,27 +37,21 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
         <StatCard label="전체 성과지표" value={formatNumber(data.totalIndicators)} unit="개" icon={ListChecks} />
-        <StatCard label="핵심 성과지표" value={formatNumber(data.coreIndicators)} unit="개" icon={Star} />
-        <StatCard label="자율 성과지표" value={formatNumber(data.autonomousIndicators)} unit="개" icon={Sparkles} />
+        <StatCard label="지표 대분류" value={formatNumber(data.categoryCount)} unit="개" icon={Layers} />
         <StatCard label="전체 평균 달성률" value={formatRate(data.averageAchievementRate)} icon={Gauge} tone="success" />
         <StatCard label="미달성 지표" value={formatNumber(data.underAchievedCount)} unit="개" icon={AlertTriangle} tone="danger" />
         <StatCard label="증빙 미제출" value={formatNumber(data.evidenceMissingCount)} unit="건" icon={FileWarning} tone="warning" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card title="전체 평균 달성률">
+        <Card title="전체 평균 달성률" className="lg:col-span-1">
           <ProgressBar rate={data.averageAchievementRate} size="md" />
-          <p className="mt-3 text-xs text-gray-500">전체 24개 지표 기준 종합 달성 현황</p>
+          <p className="mt-3 text-xs text-gray-500">전체 {data.totalIndicators}개 지표 기준 종합 달성 현황</p>
         </Card>
-        <Card title="핵심 성과지표 평균 달성률">
-          <ProgressBar rate={data.coreAverageRate} size="md" />
-          <p className="mt-3 text-xs text-gray-500">핵심 지표 {data.coreIndicators}개 평균</p>
-        </Card>
-        <Card title="자율 성과지표 평균 달성률">
-          <ProgressBar rate={data.autonomousAverageRate} size="md" />
-          <p className="mt-3 text-xs text-gray-500">자율 지표 {data.autonomousIndicators}개 평균</p>
+        <Card title="대분류별 평균 달성률" description="지표 대분류 기준" className="lg:col-span-2">
+          <CategoryBreakdownChart data={data.categoryBreakdown} />
         </Card>
       </div>
 

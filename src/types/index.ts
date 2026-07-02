@@ -1,5 +1,5 @@
-// 성과지표 구분
-export type IndicatorCategory = '핵심' | '자율';
+// 성과지표 대분류 (예: 교원확보지수, 교육과정 및 교과목 운영지수 등 — 사업단 시트의 실제 분류 체계를 그대로 사용)
+export type IndicatorCategory = string;
 
 // 지표 사용 여부
 export type IndicatorStatus = '사용' | '미사용';
@@ -61,6 +61,7 @@ export interface UniversityResult {
   achievement_rate: number | null;
   evidence_status: EvidenceStatus;
   note: string;
+  manager_name: string;
   updated_by: string;
   updated_at: string;
 }
@@ -121,13 +122,11 @@ export interface IndicatorSummary {
 // 대시보드 데이터
 export interface DashboardData {
   totalIndicators: number;
-  coreIndicators: number;
-  autonomousIndicators: number;
+  categoryCount: number;
   averageAchievementRate: number;
   underAchievedCount: number;
   evidenceMissingCount: number;
-  coreAverageRate: number;
-  autonomousAverageRate: number;
+  categoryBreakdown: { category: string; count: number; averageRate: number }[];
   universityRates: { university_name: string; rate: number }[];
   indicatorRanking: { indicator_name: string; rate: number; category: IndicatorCategory }[];
   evidenceStatusCounts: { status: EvidenceStatus; count: number }[];

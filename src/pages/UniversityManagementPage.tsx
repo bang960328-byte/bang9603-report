@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Save } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card } from '@/components/common/Card';
-import { FilterSelect } from '@/components/common/FilterSelect';
 import { CategoryBadge } from '@/components/common/StatusBadge';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { getIndicators, getUniversityResults, updateUniversityResult } from '@/services/api';
+import { dataSourceState, getIndicators, getUniversityResults, updateUniversityResult } from '@/services/api';
 import type { EvidenceStatus, IndicatorSummary, UniversityResult } from '@/types';
 import { UNIVERSITIES } from '@/types';
 import { formatRate } from '@/utils/format';
@@ -25,13 +24,14 @@ export function UniversityManagementPage() {
   const [results, setResults] = useState<UniversityResult[]>([]);
   const [indicators, setIndicators] = useState<IndicatorSummary[]>([]);
   const [editState, setEditState] = useState<Record<string, EditableRow>>({});
-  const [universityFilter, setUniversityFilter] = useState(
-    user?.role === 'university' ? user.university_name : '전체'
+  const [activeUniversity, setActiveUniversity] = useState(
+    user?.role === 'university' ? user.university_name : UNIVERSITIES[0]
   );
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const isAdmin = user?.role === 'admin';
+  const isLive = dataSourceState.mode === 'live';
 
   useEffect(() => {
     if (!user) return;
@@ -59,10 +59,10 @@ export function UniversityManagementPage() {
     return map;
   }, [indicators]);
 
-  const filteredResults = useMemo(() => {
-    if (universityFilter === '전체') return results;
-    return results.filter((r) => r.university_name === universityFilter);
-  }, [results, universityFilter]);
+  const tabResults = useMemo(
+    () => results.filter((r) => r.university_name === activeUniversity),
+    [results, activeUniversity]
+  );
 
   const updateField = (resultId: string, field: keyof EditableRow, value: string) => {
     setEditState((prev) => ({
@@ -121,28 +121,41 @@ export function UniversityManagementPage() {
       <PageHeader
         title="대학별 배부·달성 관리"
         description={
-          isAdmin
+          (isAdmin
             ? '관리자는 모든 참여대학의 실적과 증빙 제출 여부를 조회·수정할 수 있습니다.'
-            : `${user?.university_name}의 실적과 증빙 제출 여부를 입력·수정할 수 있습니다.`
+            : `${user?.university_name}의 실적과 증빙 제출 여부를 입력·수정할 수 있습니다.`) +
+          (isLive ? ' (실시간 구글시트 연동 중: 증빙·비고는 이 화면에서 저장되지 않고 실적값만 시트에 반영됩니다.)' : '')
         }
       />
-      <Card>
-        {isAdmin && (
-          <div className="mb-4">
-            <FilterSelect
-              label="대학명"
-              value={universityFilter}
-              onChange={setUniversityFilter}
-              options={[{ value: '전체', label: '전체' }, ...UNIVERSITIES.map((u) => ({ value: u, label: u }))]}
-            />
-          </div>
-        )}
 
+      {isAdmin && (
+        <div className="mb-4 flex flex-wrap gap-1 border-b border-gray-200">
+          {UNIVERSITIES.map((uni) => (
+            <button
+              key={uni}
+              type="button"
+              onClick={() => setActiveUniversity(uni)}
+              className={`rounded-t-md border border-b-0 px-4 py-2 text-sm font-medium transition-colors ${
+                activeUniversity === uni
+                  ? 'border-gray-200 bg-white text-navy-700'
+                  : 'border-transparent bg-gray-100 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              }`}
+            >
+              {uni}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-800">{activeUniversity}</h3>
+          <span className="text-xs text-gray-400">총 {tabResults.length}개 지표</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-100 text-sm">
             <thead>
               <tr className="text-left text-xs font-medium text-gray-500">
-                <th className="whitespace-nowrap px-3 py-2">대학명</th>
                 <th className="whitespace-nowrap px-3 py-2">지표명</th>
                 <th className="whitespace-nowrap px-3 py-2">구분</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right">배부 목표값</th>
@@ -155,7 +168,7 @@ export function UniversityManagementPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {!isLoading && filteredResults.map((r) => {
+              {!isLoading && tabResults.map((r) => {
                 const ind = indicatorMap.get(r.indicator_id);
                 const edit = editState[r.result_id];
                 if (!edit) return null;
@@ -167,8 +180,7 @@ export function UniversityManagementPage() {
                       : null;
                 return (
                   <tr key={r.result_id} className="align-top hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-3 py-2 font-medium text-gray-700">{r.university_name}</td>
-                    <td className="min-w-[180px] px-3 py-2 text-gray-800">{ind?.indicator_name ?? r.indicator_id}</td>
+                    <td className="min-w-[200px] px-3 py-2 text-gray-800">{ind?.indicator_name ?? r.indicator_id}</td>
                     <td className="whitespace-nowrap px-3 py-2">{ind && <CategoryBadge category={ind.category} />}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-right text-gray-600">
                       {r.allocated_target.toLocaleString('ko-KR')} {ind?.unit}
@@ -189,7 +201,9 @@ export function UniversityManagementPage() {
                       <select
                         value={edit.evidence_status}
                         onChange={(e) => updateField(r.result_id, 'evidence_status', e.target.value)}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
+                        disabled={isLive}
+                        title={isLive ? '실시간 연동에서는 지원되지 않는 항목입니다.' : undefined}
+                        className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500 disabled:bg-gray-100 disabled:text-gray-400"
                       >
                         <option value="제출">제출</option>
                         <option value="미제출">미제출</option>
@@ -202,7 +216,9 @@ export function UniversityManagementPage() {
                         value={edit.note}
                         onChange={(e) => updateField(r.result_id, 'note', e.target.value)}
                         placeholder="비고 입력"
-                        className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
+                        disabled={isLive}
+                        title={isLive ? '실시간 연동에서는 지원되지 않는 항목입니다.' : undefined}
+                        className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500 disabled:bg-gray-100 disabled:text-gray-400"
                       />
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-gray-500">{r.updated_at}</td>
@@ -223,7 +239,7 @@ export function UniversityManagementPage() {
             </tbody>
           </table>
           {isLoading && <p className="py-10 text-center text-sm text-gray-400">불러오는 중...</p>}
-          {!isLoading && filteredResults.length === 0 && (
+          {!isLoading && tabResults.length === 0 && (
             <p className="py-10 text-center text-sm text-gray-400">표시할 데이터가 없습니다.</p>
           )}
         </div>

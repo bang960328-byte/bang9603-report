@@ -5,7 +5,7 @@ import { Card } from '@/components/common/Card';
 import { CategoryBadge } from '@/components/common/StatusBadge';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { getIndicators, getUniversityResults, updateTarget, updateUniversityResult } from '@/services/api';
+import { dataSourceState, getIndicators, getUniversityResults, updateTarget, updateUniversityResult } from '@/services/api';
 import type { IndicatorSummary, UniversityResult } from '@/types';
 import { validateNumberInput } from '@/utils/calculations';
 
@@ -19,6 +19,7 @@ export function TargetSettingPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const isLive = dataSourceState.mode === 'live';
 
   useEffect(() => {
     if (!user) return;
@@ -93,7 +94,12 @@ export function TargetSettingPage() {
     <div>
       <PageHeader
         title="목표값 설정"
-        description="지표별 전체 목표값과 대학별 배부 목표값을 설정합니다. 저장 시 수정일·수정자가 자동 기록되며 음수는 입력할 수 없습니다."
+        description={
+          '지표별 전체 목표값과 대학별 배부 목표값을 설정합니다. 저장 시 수정일·수정자가 자동 기록되며 음수는 입력할 수 없습니다.' +
+          (isLive
+            ? ' (실시간 구글시트 연동 중: 전체 목표값은 대학별 배부 목표값의 합계로 자동 계산되어 직접 수정할 수 없으며, 대학별 배부 목표값만 수정 가능합니다.)'
+            : '')
+        }
       />
       <div className="space-y-3">
         {!isLoading && indicators.map((ind) => {
@@ -120,14 +126,17 @@ export function TargetSettingPage() {
                     onChange={(e) =>
                       setTotalTargetDraft((prev) => ({ ...prev, [ind.indicator_id]: e.target.value }))
                     }
-                    className="w-24 rounded-md border border-gray-300 px-2 py-1 text-right text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
+                    disabled={isLive}
+                    title={isLive ? '실시간 연동에서는 대학별 배부 목표값의 합계로 자동 계산됩니다.' : undefined}
+                    className="w-24 rounded-md border border-gray-300 px-2 py-1 text-right text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500 disabled:bg-gray-100 disabled:text-gray-400"
                   />
                   <span className="text-xs text-gray-400">{ind.unit}</span>
                   <button
                     type="button"
                     onClick={() => handleSaveTotal(ind.indicator_id)}
-                    disabled={savingKey === `total-${ind.indicator_id}`}
-                    className="inline-flex items-center gap-1 rounded-md bg-navy-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-navy-700 disabled:bg-gray-300"
+                    disabled={isLive || savingKey === `total-${ind.indicator_id}`}
+                    title={isLive ? '실시간 연동에서는 지원되지 않습니다.' : undefined}
+                    className="inline-flex items-center gap-1 rounded-md bg-navy-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-navy-700 disabled:cursor-not-allowed disabled:bg-gray-300"
                   >
                     <Save className="h-3.5 w-3.5" />
                     저장

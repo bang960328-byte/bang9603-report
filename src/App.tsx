@@ -6,8 +6,7 @@ import { Layout } from '@/components/layout/Layout';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { IndicatorsOverviewPage } from '@/pages/IndicatorsOverviewPage';
-import { CoreIndicatorsPage } from '@/pages/CoreIndicatorsPage';
-import { AutonomousIndicatorsPage } from '@/pages/AutonomousIndicatorsPage';
+import { IndicatorCategoryDetailPage } from '@/pages/IndicatorCategoryDetailPage';
 import { UniversityManagementPage } from '@/pages/UniversityManagementPage';
 import { PriorityIndicatorsPage } from '@/pages/PriorityIndicatorsPage';
 import { TargetSettingPage } from '@/pages/TargetSettingPage';
@@ -30,8 +29,7 @@ export default function App() {
             >
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/indicators" element={<IndicatorsOverviewPage />} />
-              <Route path="/indicators/core" element={<CoreIndicatorsPage />} />
-              <Route path="/indicators/autonomous" element={<AutonomousIndicatorsPage />} />
+              <Route path="/indicators/detail" element={<IndicatorCategoryDetailPage />} />
               <Route path="/university-results" element={<UniversityManagementPage />} />
               <Route path="/priority" element={<PriorityIndicatorsPage />} />
               <Route

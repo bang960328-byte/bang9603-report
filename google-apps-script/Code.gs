@@ -2,100 +2,83 @@
  * COSS 성과지표 총괄관리 시스템 - Google Apps Script API
  * 강원대학교 데이터보안·활용 혁신융합대학사업단
  *
- * 구글시트를 데이터베이스로, 이 스크립트를 API 서버로 사용한다.
+ * 이 스크립트는 사업단이 실제로 운영 중인 성과지표 스프레드시트(대학별 탭 구조)를
+ * 그대로 읽고 쓰도록 작성되었다. 대학별 탭(강원대학교/아주대학교/충남대학교/
+ * 한양대학교ERICA/영남이공대학교)에 이미 입력되어 있는 지표·목표값·실적값을
+ * 그대로 사용하며, 그 외 시트를 새로 만들 필요가 없다(사용자 계정/수정이력 시트만
+ * 최초 실행 시 자동 생성됨).
+ *
  * 배포: 배포 > 새 배포 > 유형: 웹 앱
  *   - 실행 계정: 나(스프레드시트 소유자)
- *   - 액세스 권한: 전체 공개(익명 사용자 포함) — React 앱에서 fetch로 호출하기 위함
+ *   - 액세스 권한: 전체 공개(익명 사용자 포함)
  * 배포 후 발급되는 웹 앱 URL을 프론트엔드 .env 파일의 VITE_GAS_API_URL 에 설정한다.
  *
- * 시트 구성
- *  - indicators:        indicator_id, year, category, indicator_name, unit, description, status
- *  - targets:           target_id, year, indicator_id, total_target, note, updated_at
- *  - university_results: result_id, year, indicator_id, university_name, allocated_target,
- *                        actual_result, achievement_rate, evidence_status, note, updated_by, updated_at
- *  - users:             user_id, name, email, role, university_name, password, status
- *  - logs:              log_id, timestamp, user_id, user_name, university_name, action,
- *                        sheet_name, row_id, field_name, old_value, new_value
+ * ── 대학별 탭 컬럼 구조 (A~I열, 4행부터 데이터 시작) ──
+ *   A: 지표 대분류 (병합 셀 — forward-fill로 복원)
+ *   B: 지표 중분류 (병합 셀 — forward-fill로 복원)
+ *   C: 증빙 링크 (읽지 않음)
+ *   D: 지표명
+ *   E: 담당자 (병합 셀일 수 있음 — forward-fill)
+ *   F: 3차년도 목표값 (배부 목표값)
+ *   G: 3차년도 실적값
+ *   H: 목표값-실적 (차이, 계산에 사용하지 않음 — 달성률은 이 스크립트가 직접 계산)
+ *   I: 비고/내용 (탭마다 있을 수도, 없을 수도 있음 — 있으면 읽음)
  */
 
-const SHEET_NAMES = {
-  INDICATORS: 'indicators',
-  TARGETS: 'targets',
-  RESULTS: 'university_results',
-  USERS: 'users',
-  LOGS: 'logs',
-};
+const UNIVERSITY_SHEET_NAMES = ['강원대학교', '아주대학교', '충남대학교', '한양대학교ERICA', '영남이공대학교'];
 
+// 시트 탭 이름(공백 없음) → 화면에 표시할 대학명(공백 포함, 프론트엔드 UNIVERSITIES 상수와 일치)
+const SHEET_TO_DISPLAY_NAME = {
+  강원대학교: '강원대학교',
+  아주대학교: '아주대학교',
+  충남대학교: '충남대학교',
+  한양대학교ERICA: '한양대학교 ERICA',
+  영남이공대학교: '영남이공대학교',
+};
+const DISPLAY_TO_SHEET_NAME = Object.keys(SHEET_TO_DISPLAY_NAME).reduce((acc, k) => {
+  acc[SHEET_TO_DISPLAY_NAME[k]] = k;
+  return acc;
+}, {});
+
+// 지표 목록·대분류는 강원대학교 탭(주관대학) 순서를 기준(canonical)으로 삼는다.
+const CANONICAL_SHEET = '강원대학교';
+
+const DATA_START_ROW = 4; // 1-indexed, 실제 지표 데이터가 시작되는 행
+const NUM_COLS = 9; // A~I
+const COL = { CATEGORY: 0, SUBCATEGORY: 1, EVIDENCE: 2, NAME: 3, MANAGER: 4, TARGET: 5, ACTUAL: 6, DIFF: 7, NOTE: 8 };
+
+const SHEET_NAMES = { USERS: 'users', LOGS: 'logs' };
 const DEFAULT_YEAR = 2026;
 
 // ---------------------------------------------------------------------------
 // 공통 유틸
 // ---------------------------------------------------------------------------
 
-function getSheet_(name) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(name);
-  if (!sheet) throw new Error('시트를 찾을 수 없습니다: ' + name);
-  return sheet;
-}
-
-/** 시트를 [{컬럼명: 값}, ...] 형태의 객체 배열로 변환 */
-function readSheet_(name) {
-  const sheet = getSheet_(name);
-  const values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
-  const headers = values[0];
-  return values.slice(1)
-    .filter((row) => row.some((cell) => cell !== '' && cell !== null))
-    .map((row) => {
-      const obj = {};
-      headers.forEach((h, i) => (obj[h] = row[i]));
-      return obj;
-    });
-}
-
-/** id 컬럼 값으로 시트에서 행 번호(1-based, 헤더 포함)를 찾는다 */
-function findRowIndexByColumn_(sheet, columnName, value) {
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
-  const colIdx = headers.indexOf(columnName);
-  for (let r = 1; r < values.length; r++) {
-    if (String(values[r][colIdx]) === String(value)) return { rowNumber: r + 1, headers };
-  }
-  return null;
+function getSpreadsheet_() {
+  return SpreadsheetApp.getActiveSpreadsheet();
 }
 
 function nowTimestamp_() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Seoul', 'yyyy-MM-dd HH:mm');
 }
 
-function appendLog_(entry) {
-  const sheet = getSheet_(SHEET_NAMES.LOGS);
-  const lastRow = sheet.getLastRow();
-  const logId = 'L' + String(lastRow).padStart(3, '0');
-  sheet.appendRow([
-    logId,
-    entry.timestamp || nowTimestamp_(),
-    entry.user_id || '',
-    entry.user_name || '',
-    entry.university_name || '',
-    entry.action || 'update',
-    entry.sheet_name || '',
-    entry.row_id || '',
-    entry.field_name || '',
-    entry.old_value === undefined || entry.old_value === null ? '' : String(entry.old_value),
-    entry.new_value === undefined || entry.new_value === null ? '' : String(entry.new_value),
-  ]);
+function parseNumberCell_(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  if (typeof value === 'number') return value;
+  const str = String(value).trim();
+  if (str === '-' || str === '') return null;
+  const num = Number(str.replace(/,/g, ''));
+  return isNaN(num) ? null : num;
 }
 
 function calculateAchievementRate_(actual, target) {
-  if (actual === null || actual === undefined || actual === '') return null;
+  if (actual === null || actual === undefined) return null;
   if (!target || Number(target) <= 0) return null;
   return Math.round((Number(actual) / Number(target)) * 1000) / 10;
 }
 
-function getAchievementStatus_(rate, hasAnyActual) {
-  if (!hasAnyActual || rate === null) return '미제출';
+function getAchievementStatus_(rate, hasActual) {
+  if (!hasActual || rate === null) return '미제출';
   if (rate >= 100) return '정상';
   if (rate >= 80) return '주의';
   return '미달';
@@ -109,59 +92,128 @@ function average_(nums) {
 }
 
 // ---------------------------------------------------------------------------
-// 지표 요약 생성 (indicators + targets + university_results 결합)
+// 대학별 탭 읽기 (A/B/E열 병합 셀 forward-fill 포함)
 // ---------------------------------------------------------------------------
 
-function buildIndicatorSummaries_(year) {
-  const indicators = readSheet_(SHEET_NAMES.INDICATORS).filter(
-    (i) => Number(i.year) === Number(year) && i.status === '사용'
-  );
-  const targets = readSheet_(SHEET_NAMES.TARGETS).filter((t) => Number(t.year) === Number(year));
-  const results = readSheet_(SHEET_NAMES.RESULTS).filter((r) => Number(r.year) === Number(year));
+function readUniversitySheetRows_(sheetName) {
+  const sheet = getSpreadsheet_().getSheetByName(sheetName);
+  if (!sheet) throw new Error('시트를 찾을 수 없습니다: ' + sheetName);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START_ROW) return [];
 
-  return indicators.map((ind) => {
-    const target = targets.find((t) => t.indicator_id === ind.indicator_id);
-    const totalTarget = target ? Number(target.total_target) : 0;
+  const values = sheet.getRange(DATA_START_ROW, 1, lastRow - DATA_START_ROW + 1, NUM_COLS).getValues();
+
+  let lastCategory = '';
+  let lastSubcategory = '';
+  let lastManager = '';
+  const rows = [];
+
+  values.forEach((row) => {
+    const name = String(row[COL.NAME] || '').trim();
+    if (!name) return; // 지표명이 없는 행(구분선 등)은 건너뜀
+
+    if (String(row[COL.CATEGORY] || '').trim()) lastCategory = String(row[COL.CATEGORY]).trim();
+    if (String(row[COL.SUBCATEGORY] || '').trim()) lastSubcategory = String(row[COL.SUBCATEGORY]).trim();
+    if (String(row[COL.MANAGER] || '').trim()) lastManager = String(row[COL.MANAGER]).trim();
+
+    rows.push({
+      category: lastCategory || '미분류',
+      subcategory: lastSubcategory,
+      indicator_name: name,
+      manager: lastManager,
+      target: parseNumberCell_(row[COL.TARGET]),
+      actual: parseNumberCell_(row[COL.ACTUAL]),
+      note: String(row[COL.NOTE] || '').trim(),
+    });
+  });
+
+  return rows;
+}
+
+/** 강원대학교 탭 순서를 기준으로 지표 ID·대분류를 확정한다 */
+function getCanonicalIndicators_() {
+  const rows = readUniversitySheetRows_(CANONICAL_SHEET);
+  return rows.map((r, idx) => ({
+    indicator_id: 'IND' + String(idx + 1).padStart(2, '0'),
+    indicator_name: r.indicator_name,
+    category: r.category,
+  }));
+}
+
+function getIndicatorNameMap_() {
+  const canonical = getCanonicalIndicators_();
+  const idToName = {};
+  const nameToId = {};
+  canonical.forEach((c) => {
+    idToName[c.indicator_id] = c.indicator_name;
+    nameToId[c.indicator_name] = c.indicator_id;
+  });
+  return { idToName, nameToId, canonical };
+}
+
+/** 5개 대학 탭을 모두 읽어 지표별·대학별 실적 배열로 결합한다 */
+function buildAllUniversityResults_() {
+  const { nameToId } = getIndicatorNameMap_();
+  const results = [];
+
+  UNIVERSITY_SHEET_NAMES.forEach((sheetName) => {
+    const displayName = SHEET_TO_DISPLAY_NAME[sheetName];
+    const rows = readUniversitySheetRows_(sheetName);
+    rows.forEach((r) => {
+      const indicatorId = nameToId[r.indicator_name];
+      if (!indicatorId) return; // 기준 탭(강원대학교)에 없는 지표명은 구조 불일치로 간주해 제외
+
+      const allocated = r.target || 0;
+      const actual = r.actual;
+      const rate = calculateAchievementRate_(actual, allocated);
+
+      results.push({
+        result_id: sheetName + '__' + indicatorId,
+        year: DEFAULT_YEAR,
+        indicator_id: indicatorId,
+        university_name: displayName,
+        allocated_target: allocated,
+        actual_result: actual,
+        achievement_rate: rate,
+        evidence_status: '해당없음', // 증빙 제출 여부는 이 시트에서 추적하지 않음
+        note: r.note,
+        manager_name: r.manager,
+        updated_by: r.manager || '',
+        updated_at: '',
+      });
+    });
+  });
+
+  return results;
+}
+
+function buildIndicatorSummaries_() {
+  const { canonical } = getIndicatorNameMap_();
+  const results = buildAllUniversityResults_();
+
+  return canonical.map((ind) => {
     const related = results.filter((r) => r.indicator_id === ind.indicator_id);
-
-    const hasAnyActual = related.some((r) => r.actual_result !== '' && r.actual_result !== null && r.actual_result !== undefined);
-    const isRateType = ind.unit === '%' || ind.unit === '점';
-
-    let displayActual;
-    if (isRateType) {
-      const vals = related
-        .filter((r) => r.actual_result !== '' && r.actual_result !== null && r.actual_result !== undefined)
-        .map((r) => Number(r.actual_result));
-      displayActual = average_(vals);
-    } else {
-      displayActual = related.reduce((sum, r) => sum + (Number(r.actual_result) || 0), 0);
-    }
-
-    const rate = hasAnyActual ? calculateAchievementRate_(displayActual, totalTarget) : null;
+    const hasAnyActual = related.some((r) => r.actual_result !== null && r.actual_result !== undefined);
+    const totalTarget = related.reduce((sum, r) => sum + (r.allocated_target || 0), 0);
+    const totalActual = related.reduce((sum, r) => sum + (r.actual_result || 0), 0);
+    const rate = hasAnyActual ? calculateAchievementRate_(totalActual, totalTarget) : null;
     const status = getAchievementStatus_(rate, hasAnyActual);
-
-    const evidenceRequired = related.filter((r) => r.evidence_status !== '해당없음').length;
-    const evidenceSubmitted = related.filter((r) => r.evidence_status === '제출').length;
-    const evidenceStatus =
-      evidenceRequired === 0 ? '해당없음' : evidenceSubmitted === evidenceRequired ? '제출' : '미제출';
-
-    const updatedAt = related.map((r) => r.updated_at).sort().reverse()[0] || (target && target.updated_at) || '-';
-    const note = (related.map((r) => r.note).filter(Boolean)[0]) || '';
+    const notes = related.map((r) => r.note).filter(Boolean);
 
     return {
       indicator_id: ind.indicator_id,
-      year: ind.year,
+      year: DEFAULT_YEAR,
       category: ind.category,
       indicator_name: ind.indicator_name,
-      unit: ind.unit,
-      description: ind.description,
+      unit: '',
+      description: '',
       total_target: totalTarget,
-      total_actual: displayActual,
+      total_actual: totalActual,
       achievement_rate: rate,
       status: status,
-      evidence_status: evidenceStatus,
-      note: note,
-      updated_at: updatedAt,
+      evidence_status: '해당없음',
+      note: notes[0] || '',
+      updated_at: nowTimestamp_(),
       universityResults: related,
     };
   });
@@ -170,21 +222,22 @@ function buildIndicatorSummaries_(year) {
 // ---------------------------------------------------------------------------
 // 1. getDashboardData
 // ---------------------------------------------------------------------------
-function getDashboardData_(params) {
-  const year = params.year || DEFAULT_YEAR;
-  const summaries = buildIndicatorSummaries_(year);
-  const results = readSheet_(SHEET_NAMES.RESULTS).filter((r) => Number(r.year) === Number(year));
+function getDashboardData_() {
+  const summaries = buildIndicatorSummaries_();
+  const results = buildAllUniversityResults_();
 
-  const core = summaries.filter((s) => s.category === '핵심');
-  const auto = summaries.filter((s) => s.category === '자율');
   const rates = summaries.map((s) => s.achievement_rate).filter((r) => r !== null);
-  const coreRates = core.map((s) => s.achievement_rate).filter((r) => r !== null);
-  const autoRates = auto.map((s) => s.achievement_rate).filter((r) => r !== null);
+  const categories = Array.from(new Set(summaries.map((s) => s.category)));
+  const categoryBreakdown = categories.map((category) => {
+    const items = summaries.filter((s) => s.category === category);
+    const catRates = items.map((s) => s.achievement_rate).filter((r) => r !== null);
+    return { category: category, count: items.length, averageRate: average_(catRates) };
+  });
 
   const universityNames = Array.from(new Set(results.map((r) => r.university_name)));
   const universityRates = universityNames.map((uni) => {
-    const uniResults = results.filter((r) => r.university_name === uni && r.achievement_rate !== '' && r.achievement_rate !== null);
-    return { university_name: uni, rate: average_(uniResults.map((r) => Number(r.achievement_rate))) };
+    const uniResults = results.filter((r) => r.university_name === uni && r.achievement_rate !== null);
+    return { university_name: uni, rate: average_(uniResults.map((r) => r.achievement_rate)) };
   });
 
   const indicatorRanking = summaries
@@ -194,18 +247,16 @@ function getDashboardData_(params) {
 
   const evidenceStatusCounts = ['제출', '미제출', '해당없음'].map((status) => ({
     status: status,
-    count: results.filter((r) => r.evidence_status === status).length,
+    count: status === '해당없음' ? results.length : 0,
   }));
 
   return {
     totalIndicators: summaries.length,
-    coreIndicators: core.length,
-    autonomousIndicators: auto.length,
+    categoryCount: categories.length,
     averageAchievementRate: average_(rates),
     underAchievedCount: summaries.filter((s) => s.status === '미달').length,
-    evidenceMissingCount: results.filter((r) => r.evidence_status === '미제출').length,
-    coreAverageRate: average_(coreRates),
-    autonomousAverageRate: average_(autoRates),
+    evidenceMissingCount: 0,
+    categoryBreakdown: categoryBreakdown,
     universityRates: universityRates,
     indicatorRanking: indicatorRanking,
     evidenceStatusCounts: evidenceStatusCounts,
@@ -216,9 +267,8 @@ function getDashboardData_(params) {
 // 2. getIndicators
 // ---------------------------------------------------------------------------
 function getIndicators_(params) {
-  const year = params.year || DEFAULT_YEAR;
-  const summaries = buildIndicatorSummaries_(year);
-  if (params.category) {
+  const summaries = buildIndicatorSummaries_();
+  if (params && params.category) {
     return summaries.filter((s) => s.category === params.category);
   }
   return summaries;
@@ -228,17 +278,33 @@ function getIndicators_(params) {
 // 3. getUniversityResults (권한별 범위 제한)
 // ---------------------------------------------------------------------------
 function getUniversityResults_(params) {
-  const year = params.year || DEFAULT_YEAR;
-  let results = readSheet_(SHEET_NAMES.RESULTS).filter((r) => Number(r.year) === Number(year));
-  if (params.role === 'university' && params.university_name) {
+  let results = buildAllUniversityResults_();
+  if (params && params.role === 'university' && params.university_name) {
     results = results.filter((r) => r.university_name === params.university_name);
   }
   return results;
 }
 
 // ---------------------------------------------------------------------------
-// 4. updateUniversityResult
+// 4. updateUniversityResult — 대학별 탭의 G열(실적)에 직접 반영
 // ---------------------------------------------------------------------------
+function findIndicatorRowNumber_(sheet, indicatorName) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START_ROW) return null;
+  const names = sheet.getRange(DATA_START_ROW, COL.NAME + 1, lastRow - DATA_START_ROW + 1, 1).getValues();
+  for (let i = 0; i < names.length; i++) {
+    if (String(names[i][0] || '').trim() === indicatorName) return DATA_START_ROW + i;
+  }
+  return null;
+}
+
+function parseResultId_(resultId) {
+  const sheetName = UNIVERSITY_SHEET_NAMES.filter((s) => resultId.indexOf(s + '__') === 0)[0];
+  if (!sheetName) return null;
+  const indicatorId = resultId.substring(sheetName.length + 2);
+  return { sheetName: sheetName, indicatorId: indicatorId };
+}
+
 function updateUniversityResult_(payload) {
   if (payload.actual_result !== undefined && payload.actual_result !== null && Number(payload.actual_result) < 0) {
     return { success: false, message: '음수는 입력할 수 없습니다.' };
@@ -247,120 +313,77 @@ function updateUniversityResult_(payload) {
     return { success: false, message: '음수는 입력할 수 없습니다.' };
   }
 
-  const sheet = getSheet_(SHEET_NAMES.RESULTS);
-  const found = findRowIndexByColumn_(sheet, 'result_id', payload.result_id);
-  if (!found) return { success: false, message: '대상 실적 데이터를 찾을 수 없습니다.' };
+  const parsed = parseResultId_(payload.result_id);
+  if (!parsed) return { success: false, message: '대상 실적 데이터를 찾을 수 없습니다.' };
 
-  const headers = found.headers;
-  const rowNumber = found.rowNumber;
-  const colIdx = (name) => headers.indexOf(name) + 1;
-  const currentRow = sheet.getRange(rowNumber, 1, 1, headers.length).getValues()[0];
-  const getCurrent = (name) => currentRow[headers.indexOf(name)];
+  const { idToName } = getIndicatorNameMap_();
+  const indicatorName = idToName[parsed.indicatorId];
+  if (!indicatorName) return { success: false, message: '지표를 찾을 수 없습니다.' };
+
+  const sheet = getSpreadsheet_().getSheetByName(parsed.sheetName);
+  const rowNumber = findIndicatorRowNumber_(sheet, indicatorName);
+  if (!rowNumber) return { success: false, message: '해당 대학 탭에서 지표 행을 찾을 수 없습니다.' };
 
   const timestamp = nowTimestamp_();
-  const universityName = payload.university_name || getCurrent('university_name');
+  const displayName = SHEET_TO_DISPLAY_NAME[parsed.sheetName];
 
-  if (payload.allocated_target !== undefined && String(getCurrent('allocated_target')) !== String(payload.allocated_target)) {
+  if (payload.actual_result !== undefined) {
+    const before = sheet.getRange(rowNumber, COL.ACTUAL + 1).getValue();
+    sheet.getRange(rowNumber, COL.ACTUAL + 1).setValue(payload.actual_result === null ? '' : Number(payload.actual_result));
     appendLog_({
-      timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: universityName,
-      action: 'update', sheet_name: SHEET_NAMES.RESULTS, row_id: payload.result_id,
-      field_name: 'allocated_target', old_value: getCurrent('allocated_target'), new_value: payload.allocated_target,
+      timestamp: timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: displayName,
+      action: 'update', sheet_name: parsed.sheetName, row_id: indicatorName,
+      field_name: '실적(G열)', old_value: before, new_value: payload.actual_result,
     });
-    sheet.getRange(rowNumber, colIdx('allocated_target')).setValue(Number(payload.allocated_target));
   }
 
-  if (payload.actual_result !== undefined && String(getCurrent('actual_result')) !== String(payload.actual_result)) {
+  if (payload.allocated_target !== undefined) {
+    const before = sheet.getRange(rowNumber, COL.TARGET + 1).getValue();
+    sheet.getRange(rowNumber, COL.TARGET + 1).setValue(Number(payload.allocated_target));
     appendLog_({
-      timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: universityName,
-      action: 'update', sheet_name: SHEET_NAMES.RESULTS, row_id: payload.result_id,
-      field_name: 'actual_result', old_value: getCurrent('actual_result'), new_value: payload.actual_result,
+      timestamp: timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: displayName,
+      action: 'update', sheet_name: parsed.sheetName, row_id: indicatorName,
+      field_name: '목표값(F열)', old_value: before, new_value: payload.allocated_target,
     });
-    sheet.getRange(rowNumber, colIdx('actual_result')).setValue(payload.actual_result === null ? '' : Number(payload.actual_result));
   }
 
-  if (payload.evidence_status && getCurrent('evidence_status') !== payload.evidence_status) {
-    appendLog_({
-      timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: universityName,
-      action: 'update', sheet_name: SHEET_NAMES.RESULTS, row_id: payload.result_id,
-      field_name: 'evidence_status', old_value: getCurrent('evidence_status'), new_value: payload.evidence_status,
-    });
-    sheet.getRange(rowNumber, colIdx('evidence_status')).setValue(payload.evidence_status);
-  }
-
-  if (payload.note !== undefined && getCurrent('note') !== payload.note) {
-    appendLog_({
-      timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: universityName,
-      action: 'update', sheet_name: SHEET_NAMES.RESULTS, row_id: payload.result_id,
-      field_name: 'note', old_value: getCurrent('note'), new_value: payload.note,
-    });
-    sheet.getRange(rowNumber, colIdx('note')).setValue(payload.note);
-  }
-
-  // 달성률 자동 계산
-  const finalActual = payload.actual_result !== undefined ? payload.actual_result : getCurrent('actual_result');
-  const finalTarget = payload.allocated_target !== undefined ? payload.allocated_target : getCurrent('allocated_target');
-  const rate = calculateAchievementRate_(finalActual, finalTarget);
-  sheet.getRange(rowNumber, colIdx('achievement_rate')).setValue(rate === null ? '' : rate);
-
-  sheet.getRange(rowNumber, colIdx('updated_by')).setValue(payload.updated_by || '');
-  sheet.getRange(rowNumber, colIdx('updated_at')).setValue(timestamp);
+  // 비고(I열)는 대학마다 위치·존재 여부가 달라 병합 셀을 잘못 건드릴 위험이 있어 쓰기를 지원하지 않는다.
+  // 증빙 제출 여부 역시 이 시트에서 관리하지 않으므로 저장 요청이 와도 무시한다.
 
   return { success: true };
 }
 
 // ---------------------------------------------------------------------------
-// 5. updateTarget (관리자 전용 — 프론트엔드에서 role 검증 후 호출)
+// 5. updateTarget — 실제 시트에는 "전체 목표값" 단일 셀이 없고, 대학별 배부 목표값의
+//    합계가 곧 전체 목표값이므로 전체 목표값 직접 수정은 지원하지 않는다.
+//    (대학별 배부 목표값 수정은 updateUniversityResult_의 allocated_target으로 처리)
 // ---------------------------------------------------------------------------
-function updateTarget_(payload) {
-  if (Number(payload.total_target) < 0) {
-    return { success: false, message: '음수는 입력할 수 없습니다.' };
-  }
-
-  const sheet = getSheet_(SHEET_NAMES.TARGETS);
-  const found = findRowIndexByColumn_(sheet, 'indicator_id', payload.indicator_id);
-  if (!found) return { success: false, message: '대상 목표값을 찾을 수 없습니다.' };
-
-  const headers = found.headers;
-  const rowNumber = found.rowNumber;
-  const colIdx = (name) => headers.indexOf(name) + 1;
-  const currentRow = sheet.getRange(rowNumber, 1, 1, headers.length).getValues()[0];
-  const oldTarget = currentRow[headers.indexOf('total_target')];
-  const timestamp = nowTimestamp_();
-
-  appendLog_({
-    timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: '전체',
-    action: 'update', sheet_name: SHEET_NAMES.TARGETS, row_id: currentRow[headers.indexOf('target_id')],
-    field_name: 'total_target', old_value: oldTarget, new_value: payload.total_target,
-  });
-
-  sheet.getRange(rowNumber, colIdx('total_target')).setValue(Number(payload.total_target));
-  if (payload.note !== undefined) sheet.getRange(rowNumber, colIdx('note')).setValue(payload.note);
-  sheet.getRange(rowNumber, colIdx('updated_at')).setValue(timestamp);
-
-  return { success: true };
+function updateTarget_() {
+  return {
+    success: false,
+    message: '전체 목표값은 대학별 배부 목표값의 합계로 자동 계산됩니다. 대학별 배부·달성 관리 화면 또는 대학별 배부 목표값 수정 기능을 이용해 주세요.',
+  };
 }
 
 // ---------------------------------------------------------------------------
 // 6. getPriorityIndicators
 // ---------------------------------------------------------------------------
-function getPriorityIndicators_(params) {
-  const year = params.year || DEFAULT_YEAR;
-  const summaries = buildIndicatorSummaries_(year);
+function getPriorityIndicators_() {
+  const summaries = buildIndicatorSummaries_();
   const priorities = [];
 
   summaries.forEach((summary) => {
     summary.universityResults.forEach((r) => {
       const reasons = [];
-      const hasActual = r.actual_result !== '' && r.actual_result !== null && r.actual_result !== undefined;
+      const hasActual = r.actual_result !== null && r.actual_result !== undefined;
       if (!hasActual) reasons.push('실적값 미입력');
-      else if (r.achievement_rate !== '' && Number(r.achievement_rate) < 80) reasons.push('목표 대비 실적 부족');
-      if (r.evidence_status === '미제출') reasons.push('증빙 미제출');
+      else if (r.achievement_rate !== null && r.achievement_rate < 80) reasons.push('목표 대비 실적 부족');
       if (reasons.length === 0) return;
 
-      const rate = hasActual ? Number(r.achievement_rate) : null;
+      const rate = hasActual ? r.achievement_rate : null;
       let risk = '낮음';
-      if (!hasActual || (rate !== null && rate < 60) || reasons.length >= 2) risk = '높음';
-      else if ((rate !== null && rate < 80) || r.evidence_status === '미제출') risk = '보통';
+      if (!hasActual || (rate !== null && rate < 60)) risk = '높음';
+      else if (rate !== null && rate < 80) risk = '보통';
 
       priorities.push({
         risk_level: risk,
@@ -368,11 +391,11 @@ function getPriorityIndicators_(params) {
         indicator_name: summary.indicator_name,
         university_name: r.university_name,
         target: r.allocated_target,
-        actual: hasActual ? Number(r.actual_result) : null,
-        achievement_rate: rate,
+        actual: r.actual_result,
+        achievement_rate: r.achievement_rate,
         reason: reasons.join(', '),
-        action_needed: !hasActual ? '실적값 입력 요청' : r.evidence_status === '미제출' ? '증빙자료 제출 요청' : '실적 개선 계획 수립 요청',
-        manager: r.updated_by || '-',
+        action_needed: !hasActual ? '실적값 입력 요청' : '실적 개선 계획 수립 요청',
+        manager: r.manager_name || '-',
         note: r.note,
       });
     });
@@ -383,10 +406,52 @@ function getPriorityIndicators_(params) {
 }
 
 // ---------------------------------------------------------------------------
-// 7. login (실제 운영 전까지 간단한 시트 기반 로그인)
+// 7. login — users 시트가 없으면 최초 실행 시 관리자/대학 담당자 기본 계정으로 자동 생성
 // ---------------------------------------------------------------------------
+function ensureUsersSheet_() {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.USERS);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(SHEET_NAMES.USERS);
+  sheet.appendRow(['user_id', 'name', 'email', 'role', 'university_name', 'password', 'status']);
+  sheet.appendRow(['U001', '관리자', 'admin@coss.kangwon.ac.kr', 'admin', '전체', 'admin1234', '사용']);
+  sheet.appendRow(['U002', '강원대학교 담당자', 'kw@coss.kangwon.ac.kr', 'university', '강원대학교', 'kw1234', '사용']);
+  sheet.appendRow(['U003', '아주대학교 담당자', 'ajou@coss.kangwon.ac.kr', 'university', '아주대학교', 'ajou1234', '사용']);
+  sheet.appendRow(['U004', '충남대학교 담당자', 'cnu@coss.kangwon.ac.kr', 'university', '충남대학교', 'cnu1234', '사용']);
+  sheet.appendRow(['U005', '한양대학교 ERICA 담당자', 'hyu@coss.kangwon.ac.kr', 'university', '한양대학교 ERICA', 'hyu1234', '사용']);
+  sheet.appendRow(['U006', '영남이공대학교 담당자', 'ync@coss.kangwon.ac.kr', 'university', '영남이공대학교', 'ync1234', '사용']);
+  return sheet;
+}
+
+function ensureLogsSheet_() {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.LOGS);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(SHEET_NAMES.LOGS);
+  sheet.appendRow([
+    'log_id', 'timestamp', 'user_id', 'user_name', 'university_name',
+    'action', 'sheet_name', 'row_id', 'field_name', 'old_value', 'new_value',
+  ]);
+  return sheet;
+}
+
+function readUsersSheet_() {
+  const sheet = ensureUsersSheet_();
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  return values.slice(1)
+    .filter((row) => row.some((cell) => cell !== '' && cell !== null))
+    .map((row) => {
+      const obj = {};
+      headers.forEach((h, i) => (obj[h] = row[i]));
+      return obj;
+    });
+}
+
 function login_(payload) {
-  const users = readSheet_(SHEET_NAMES.USERS);
+  const users = readUsersSheet_();
   const user = users.find(
     (u) => String(u.email).toLowerCase() === String(payload.email).toLowerCase() && String(u.password) === String(payload.password)
   );
@@ -406,30 +471,55 @@ function login_(payload) {
 }
 
 // ---------------------------------------------------------------------------
-// 사용자 관리 / 수정 이력 (화면 요구사항 지원용 보조 API)
+// 사용자 관리 / 수정 이력
 // ---------------------------------------------------------------------------
+function appendLog_(entry) {
+  const sheet = ensureLogsSheet_();
+  const logId = 'L' + String(sheet.getLastRow()).padStart(4, '0');
+  sheet.appendRow([
+    logId,
+    entry.timestamp || nowTimestamp_(),
+    entry.user_id || '',
+    entry.user_name || '',
+    entry.university_name || '',
+    entry.action || 'update',
+    entry.sheet_name || '',
+    entry.row_id || '',
+    entry.field_name || '',
+    entry.old_value === undefined || entry.old_value === null ? '' : String(entry.old_value),
+    entry.new_value === undefined || entry.new_value === null ? '' : String(entry.new_value),
+  ]);
+}
+
 function getUsers_() {
-  return readSheet_(SHEET_NAMES.USERS).map((u) => {
+  return readUsersSheet_().map((u) => {
     const copy = Object.assign({}, u);
-    delete copy.password; // 목록 조회 시 비밀번호는 반환하지 않음
+    delete copy.password;
     return copy;
   });
 }
 
 function upsertUser_(payload) {
   const user = payload.user;
-  const sheet = getSheet_(SHEET_NAMES.USERS);
-  const found = findRowIndexByColumn_(sheet, 'user_id', user.user_id);
+  const sheet = ensureUsersSheet_();
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const idCol = headers.indexOf('user_id');
 
-  if (found) {
-    const headers = found.headers;
-    const rowNumber = found.rowNumber;
+  let rowNumber = null;
+  for (let r = 1; r < values.length; r++) {
+    if (String(values[r][idCol]) === String(user.user_id)) {
+      rowNumber = r + 1;
+      break;
+    }
+  }
+
+  if (rowNumber) {
     headers.forEach((h, i) => {
-      if (h === 'password' && !user.password) return; // 비밀번호 미입력 시 기존 값 유지
+      if (h === 'password' && !user.password) return;
       if (user[h] !== undefined) sheet.getRange(rowNumber, i + 1).setValue(user[h]);
     });
   } else {
-    const headers = sheet.getDataRange().getValues()[0];
     sheet.appendRow(headers.map((h) => (user[h] !== undefined ? user[h] : '')));
   }
 
@@ -437,7 +527,17 @@ function upsertUser_(payload) {
 }
 
 function getChangeLogs_() {
-  return readSheet_(SHEET_NAMES.LOGS).sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+  const sheet = ensureLogsSheet_();
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const logs = values.slice(1)
+    .filter((row) => row.some((cell) => cell !== '' && cell !== null))
+    .map((row) => {
+      const obj = {};
+      headers.forEach((h, i) => (obj[h] = row[i]));
+      return obj;
+    });
+  return logs.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
 }
 
 // ---------------------------------------------------------------------------
@@ -450,7 +550,7 @@ function jsonResponse_(data) {
 function routeAction_(action, params) {
   switch (action) {
     case 'getDashboardData':
-      return { success: true, data: getDashboardData_(params) };
+      return { success: true, data: getDashboardData_() };
     case 'getIndicators':
       return { success: true, data: getIndicators_(params) };
     case 'getUniversityResults':

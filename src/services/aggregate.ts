@@ -82,15 +82,16 @@ export function buildDashboardData(
   summaries: IndicatorSummary[],
   results: UniversityResult[]
 ): DashboardData {
-  const coreSummaries = summaries.filter((s) => s.category === '핵심');
-  const autoSummaries = summaries.filter((s) => s.category === '자율');
-
   const ratesWithValue = summaries
     .map((s) => s.achievement_rate)
     .filter((r): r is number => r !== null);
 
-  const coreRates = coreSummaries.map((s) => s.achievement_rate).filter((r): r is number => r !== null);
-  const autoRates = autoSummaries.map((s) => s.achievement_rate).filter((r): r is number => r !== null);
+  const categories = Array.from(new Set(summaries.map((s) => s.category)));
+  const categoryBreakdown = categories.map((category) => {
+    const items = summaries.filter((s) => s.category === category);
+    const rates = items.map((s) => s.achievement_rate).filter((r): r is number => r !== null);
+    return { category, count: items.length, averageRate: average(rates) };
+  });
 
   const underAchievedCount = summaries.filter((s) => s.status === '미달').length;
   const evidenceMissingCount = results.filter((r) => r.evidence_status === '미제출').length;
@@ -118,13 +119,11 @@ export function buildDashboardData(
 
   return {
     totalIndicators: summaries.length,
-    coreIndicators: coreSummaries.length,
-    autonomousIndicators: autoSummaries.length,
+    categoryCount: categories.length,
     averageAchievementRate: average(ratesWithValue),
     underAchievedCount,
     evidenceMissingCount,
-    coreAverageRate: average(coreRates),
-    autonomousAverageRate: average(autoRates),
+    categoryBreakdown,
     universityRates,
     indicatorRanking,
     evidenceStatusCounts,
@@ -173,7 +172,7 @@ export function buildPriorityIndicators(
             : r.evidence_status === '미제출'
               ? '증빙자료 제출 요청'
               : '실적 개선 계획 수립 요청',
-        manager: r.updated_by || '-',
+        manager: r.manager_name || r.updated_by || '-',
         note: r.note,
       });
     });
