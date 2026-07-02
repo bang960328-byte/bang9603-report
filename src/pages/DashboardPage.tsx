@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ListChecks, Star, Sparkles, Gauge, AlertTriangle, FileWarning } from 'lucide-react';
 import { StatCard } from '@/components/common/StatCard';
 import { Card } from '@/components/common/Card';
@@ -10,20 +10,25 @@ import { EvidenceStatusChart } from '@/components/charts/EvidenceStatusChart';
 import { getDashboardData, getPriorityIndicators } from '@/services/api';
 import type { DashboardData, PriorityIndicator } from '@/types';
 import { formatNumber, formatRate } from '@/utils/format';
+import { useAutoRefresh } from '@/utils/useAutoRefresh';
 
 export function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [priorities, setPriorities] = useState<PriorityIndicator[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      const [dashboard, priority] = await Promise.all([getDashboardData(), getPriorityIndicators()]);
-      setData(dashboard);
-      setPriorities(priority.slice(0, 5));
-      setIsLoading(false);
-    })();
+  const load = useCallback(async () => {
+    const [dashboard, priority] = await Promise.all([getDashboardData(), getPriorityIndicators()]);
+    setData(dashboard);
+    setPriorities(priority.slice(0, 5));
+    setIsLoading(false);
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useAutoRefresh(load, 30000);
 
   if (isLoading || !data) {
     return <div className="py-20 text-center text-sm text-gray-400">데이터를 불러오는 중입니다...</div>;

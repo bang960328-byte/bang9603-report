@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card } from '@/components/common/Card';
 import { FilterSelect } from '@/components/common/FilterSelect';
 import { SearchInput } from '@/components/common/SearchInput';
 import { getChangeLogs } from '@/services/api';
 import type { ChangeLog } from '@/types';
+import { useAutoRefresh } from '@/utils/useAutoRefresh';
 
 const SHEET_LABELS: Record<string, string> = {
   university_results: '대학별 배부·달성 관리',
@@ -24,12 +25,18 @@ export function ChangeLogPage() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getChangeLogs().then((data) => {
       setLogs(data);
       setIsLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useAutoRefresh(load, 30000);
 
   const filtered = useMemo(() => {
     let list = logs;

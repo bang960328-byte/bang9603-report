@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card } from '@/components/common/Card';
 import { FilterSelect } from '@/components/common/FilterSelect';
@@ -6,6 +6,7 @@ import { RiskBadge } from '@/components/common/StatusBadge';
 import { getPriorityIndicators } from '@/services/api';
 import type { PriorityIndicator, RiskLevel } from '@/types';
 import { formatNumber, formatRate } from '@/utils/format';
+import { useAutoRefresh } from '@/utils/useAutoRefresh';
 
 const RISK_OPTIONS: (RiskLevel | '전체')[] = ['전체', '높음', '보통', '낮음'];
 
@@ -14,12 +15,18 @@ export function PriorityIndicatorsPage() {
   const [risk, setRisk] = useState<string>('전체');
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getPriorityIndicators().then((data) => {
       setItems(data);
       setIsLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useAutoRefresh(load, 30000);
 
   const filtered = risk === '전체' ? items : items.filter((i) => i.risk_level === risk);
 

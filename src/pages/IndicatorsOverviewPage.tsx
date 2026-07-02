@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card } from '@/components/common/Card';
@@ -10,6 +10,7 @@ import { getIndicators } from '@/services/api';
 import type { AchievementStatus, EvidenceStatus, IndicatorSummary } from '@/types';
 import { UNIVERSITIES } from '@/types';
 import { formatNumber, formatRate } from '@/utils/format';
+import { useAutoRefresh } from '@/utils/useAutoRefresh';
 
 type SortKey = 'indicator_id' | 'achievement_rate' | 'updated_at';
 type SortDir = 'asc' | 'desc';
@@ -28,12 +29,18 @@ export function IndicatorsOverviewPage() {
   const [sortKey, setSortKey] = useState<SortKey>('indicator_id');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getIndicators().then((data) => {
       setRows(data);
       setIsLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useAutoRefresh(load, 30000);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {

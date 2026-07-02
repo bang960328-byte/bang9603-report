@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Card } from '@/components/common/Card';
 import { ProgressBar } from '@/components/common/ProgressBar';
@@ -6,18 +6,25 @@ import { EvidenceBadge, StatusBadge } from '@/components/common/StatusBadge';
 import { getIndicators } from '@/services/api';
 import type { IndicatorCategory, IndicatorSummary } from '@/types';
 import { formatNumber, formatRate } from '@/utils/format';
+import { useAutoRefresh } from '@/utils/useAutoRefresh';
 
 export function IndicatorCategoryList({ category }: { category: IndicatorCategory }) {
   const [items, setItems] = useState<IndicatorSummary[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getIndicators(category).then((data) => {
       setItems(data);
       setIsLoading(false);
     });
   }, [category]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useAutoRefresh(load, 30000);
 
   if (isLoading) {
     return <p className="py-10 text-center text-sm text-gray-400">불러오는 중...</p>;
