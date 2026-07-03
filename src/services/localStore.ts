@@ -22,6 +22,8 @@ export const localStore = {
   universityResults: clone(sampleUniversityResults) as UniversityResult[],
   users: clone(sampleUsers) as User[],
   logs: clone(sampleLogs) as ChangeLog[],
+  // 우선 관리 지표 화면의 "조치 필요사항" (지표ID → 텍스트)
+  priorityActions: {} as Record<string, string>,
 };
 
 let logSeq = localStore.logs.length;

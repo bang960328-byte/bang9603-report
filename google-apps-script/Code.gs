@@ -108,11 +108,18 @@ function readUniversitySheetRows_(sheetName) {
   let lastManager = '';
   const rows = [];
 
-  values.forEach((row) => {
-    const name = String(row[COL.NAME] || '').trim();
-    if (!name) return; // 지표명이 없는 행(구분선 등)은 건너뜀
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    const categoryCell = String(row[COL.CATEGORY] || '').trim();
 
-    if (String(row[COL.CATEGORY] || '').trim()) lastCategory = String(row[COL.CATEGORY]).trim();
+    // 지표표 아래에 붙어있는 "달성지표 / 건명 / 증빙제출여부" 저장용 표를 만나면 읽기를 멈춘다.
+    // (이 아래 행들은 실제 성과지표가 아니라 세부 내용 입력란이므로 집계에서 제외)
+    if (categoryCell === '달성지표') break;
+
+    const name = String(row[COL.NAME] || '').trim();
+    if (!name) continue; // 지표명이 없는 행(구분선 등)은 건너뜀
+
+    if (categoryCell) lastCategory = categoryCell;
     if (String(row[COL.SUBCATEGORY] || '').trim()) lastSubcategory = String(row[COL.SUBCATEGORY]).trim();
     if (String(row[COL.MANAGER] || '').trim()) lastManager = String(row[COL.MANAGER]).trim();
 
@@ -125,7 +132,7 @@ function readUniversitySheetRows_(sheetName) {
       actual: parseNumberCell_(row[COL.ACTUAL]),
       note: String(row[COL.NOTE] || '').trim(),
     });
-  });
+  }
 
   return rows;
 }
@@ -347,8 +354,20 @@ function updateUniversityResult_(payload) {
     });
   }
 
-  // 비고(I열)는 대학마다 위치·존재 여부가 달라 병합 셀을 잘못 건드릴 위험이 있어 쓰기를 지원하지 않는다.
-  // 증빙 제출 여부 역시 이 시트에서 관리하지 않으므로 저장 요청이 와도 무시한다.
+  // 비고(I열) 저장 — 화면에서 읽어오는 것과 같은 열에 그대로 기록한다.
+  if (payload.note !== undefined) {
+    const before = sheet.getRange(rowNumber, COL.NOTE + 1).getValue();
+    if (String(before) !== String(payload.note)) {
+      sheet.getRange(rowNumber, COL.NOTE + 1).setValue(payload.note);
+      appendLog_({
+        timestamp: timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: displayName,
+        action: 'update', sheet_name: parsed.sheetName, row_id: indicatorName,
+        field_name: '비고(I열)', old_value: before, new_value: payload.note,
+      });
+    }
+  }
+
+  // 증빙 제출 여부는 이 시트에서 관리하지 않으므로 저장 요청이 와도 무시한다.
 
   return { success: true };
 }
@@ -361,48 +380,105 @@ function updateUniversityResult_(payload) {
 function updateTarget_() {
   return {
     success: false,
-    message: '전체 목표값은 대학별 배부 목표값의 합계로 자동 계산됩니다. 대학별 배부·달성 관리 화면 또는 대학별 배부 목표값 수정 기능을 이용해 주세요.',
+    message: '전체 목표값은 대학별 배부 목표값의 합계로 자동 계산됩니다. 대학별 배부·달성 관리 화면에서 배부 목표값을 수정해 주세요.',
   };
 }
 
 // ---------------------------------------------------------------------------
-// 6. getPriorityIndicators
+// 6. getPriorityIndicators — 지표별(5개 대학 합산)로 집계
 // ---------------------------------------------------------------------------
 function getPriorityIndicators_() {
   const summaries = buildIndicatorSummaries_();
+  const actions = readPriorityActions_();
   const priorities = [];
 
   summaries.forEach((summary) => {
-    summary.universityResults.forEach((r) => {
-      const reasons = [];
-      const hasActual = r.actual_result !== null && r.actual_result !== undefined;
-      if (!hasActual) reasons.push('실적값 미입력');
-      else if (r.achievement_rate !== null && r.achievement_rate < 80) reasons.push('목표 대비 실적 부족');
-      if (reasons.length === 0) return;
+    const hasActual = summary.universityResults.some(
+      (r) => r.actual_result !== null && r.actual_result !== undefined
+    );
+    const rate = summary.achievement_rate;
 
-      const rate = hasActual ? r.achievement_rate : null;
-      let risk = '낮음';
-      if (!hasActual || (rate !== null && rate < 60)) risk = '높음';
-      else if (rate !== null && rate < 80) risk = '보통';
+    // 우선 관리 대상: 실적 미입력 또는 달성률 80% 미만
+    if (hasActual && rate !== null && rate >= 80) return;
 
-      priorities.push({
-        risk_level: risk,
-        indicator_id: summary.indicator_id,
-        indicator_name: summary.indicator_name,
-        university_name: r.university_name,
-        target: r.allocated_target,
-        actual: r.actual_result,
-        achievement_rate: r.achievement_rate,
-        reason: reasons.join(', '),
-        action_needed: !hasActual ? '실적값 입력 요청' : '실적 개선 계획 수립 요청',
-        manager: r.manager_name || '-',
-        note: r.note,
-      });
+    let risk, reason;
+    if (!hasActual) {
+      risk = '높음';
+      reason = '실적값 미입력';
+    } else if (rate !== null && rate < 60) {
+      risk = '높음';
+      reason = '목표 대비 실적 부족';
+    } else {
+      risk = '보통';
+      reason = '목표 대비 실적 부족';
+    }
+
+    priorities.push({
+      risk_level: risk,
+      indicator_id: summary.indicator_id,
+      indicator_name: summary.indicator_name,
+      category: summary.category,
+      total_target: summary.total_target,
+      total_actual: hasActual ? summary.total_actual : null,
+      achievement_rate: rate,
+      reason: reason,
+      action_needed: actions[summary.indicator_id] || '',
     });
   });
 
   const riskOrder = { 높음: 0, 보통: 1, 낮음: 2 };
-  return priorities.sort((a, b) => riskOrder[a.risk_level] - riskOrder[b.risk_level]);
+  return priorities.sort(function (a, b) {
+    return (riskOrder[a.risk_level] - riskOrder[b.risk_level]) ||
+      ((a.achievement_rate === null ? -1 : a.achievement_rate) - (b.achievement_rate === null ? -1 : b.achievement_rate));
+  });
+}
+
+// 우선 관리 지표의 "조치 필요사항"을 저장하는 시트 (최초 호출 시 자동 생성)
+function ensurePriorityActionsSheet_() {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName('priority_actions');
+  if (sheet) return sheet;
+  sheet = ss.insertSheet('priority_actions');
+  sheet.appendRow(['indicator_id', 'indicator_name', 'action_needed', 'updated_by', 'updated_at']);
+  return sheet;
+}
+
+function readPriorityActions_() {
+  const sheet = ensurePriorityActionsSheet_();
+  const values = sheet.getDataRange().getValues();
+  const map = {};
+  for (let r = 1; r < values.length; r++) {
+    const id = String(values[r][0] || '').trim();
+    if (id) map[id] = String(values[r][2] || '');
+  }
+  return map;
+}
+
+function updatePriorityAction_(payload) {
+  const sheet = ensurePriorityActionsSheet_();
+  const values = sheet.getDataRange().getValues();
+  const timestamp = nowTimestamp_();
+  let rowNumber = null;
+  for (let r = 1; r < values.length; r++) {
+    if (String(values[r][0]) === String(payload.indicator_id)) {
+      rowNumber = r + 1;
+      break;
+    }
+  }
+  if (rowNumber) {
+    sheet.getRange(rowNumber, 3).setValue(payload.action_needed || '');
+    sheet.getRange(rowNumber, 4).setValue(payload.updated_by || '');
+    sheet.getRange(rowNumber, 5).setValue(timestamp);
+  } else {
+    sheet.appendRow([
+      payload.indicator_id,
+      payload.indicator_name || '',
+      payload.action_needed || '',
+      payload.updated_by || '',
+      timestamp,
+    ]);
+  }
+  return { success: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -561,6 +637,8 @@ function routeAction_(action, params) {
       return { success: true, data: updateTarget_(params) };
     case 'getPriorityIndicators':
       return { success: true, data: getPriorityIndicators_(params) };
+    case 'updatePriorityAction':
+      return { success: true, data: updatePriorityAction_(params) };
     case 'login':
       return { success: true, data: login_(params) };
     case 'getUsers':

@@ -131,53 +131,50 @@ export function buildDashboardData(
 }
 
 export function buildPriorityIndicators(
-  summaries: IndicatorSummary[]
+  summaries: IndicatorSummary[],
+  actions: Record<string, string> = {}
 ): PriorityIndicator[] {
   const priorities: PriorityIndicator[] = [];
 
   summaries.forEach((summary) => {
-    summary.universityResults.forEach((r) => {
-      const reasons: string[] = [];
-      if (r.actual_result === null || r.actual_result === undefined) {
-        reasons.push('실적값 미입력');
-      } else if (r.achievement_rate !== null && r.achievement_rate < 80) {
-        reasons.push('목표 대비 실적 부족');
-      }
-      if (r.evidence_status === '미제출') {
-        reasons.push('증빙 미제출');
-      }
+    const hasAnyActual = summary.universityResults.some(
+      (r) => r.actual_result !== null && r.actual_result !== undefined
+    );
+    const rate = summary.achievement_rate;
 
-      if (reasons.length === 0) return;
+    // 우선 관리 대상: 실적 미입력 또는 달성률 80% 미만
+    if (hasAnyActual && rate !== null && rate >= 80) return;
 
-      const rate = r.achievement_rate;
-      let risk: PriorityIndicator['risk_level'] = '낮음';
-      if (r.actual_result === null || (rate !== null && rate < 60) || reasons.length >= 2) {
-        risk = '높음';
-      } else if ((rate !== null && rate < 80) || r.evidence_status === '미제출') {
-        risk = '보통';
-      }
+    let risk: PriorityIndicator['risk_level'];
+    let reason: string;
+    if (!hasAnyActual) {
+      risk = '높음';
+      reason = '실적값 미입력';
+    } else if (rate !== null && rate < 60) {
+      risk = '높음';
+      reason = '목표 대비 실적 부족';
+    } else {
+      risk = '보통';
+      reason = '목표 대비 실적 부족';
+    }
 
-      priorities.push({
-        risk_level: risk,
-        indicator_id: summary.indicator_id,
-        indicator_name: summary.indicator_name,
-        university_name: r.university_name,
-        target: r.allocated_target,
-        actual: r.actual_result,
-        achievement_rate: r.achievement_rate,
-        reason: reasons.join(', '),
-        action_needed:
-          r.actual_result === null
-            ? '실적값 입력 요청'
-            : r.evidence_status === '미제출'
-              ? '증빙자료 제출 요청'
-              : '실적 개선 계획 수립 요청',
-        manager: r.manager_name || r.updated_by || '-',
-        note: r.note,
-      });
+    priorities.push({
+      risk_level: risk,
+      indicator_id: summary.indicator_id,
+      indicator_name: summary.indicator_name,
+      category: summary.category,
+      total_target: summary.total_target,
+      total_actual: hasAnyActual ? summary.total_actual : null,
+      achievement_rate: rate,
+      reason,
+      action_needed: actions[summary.indicator_id] ?? '',
     });
   });
 
   const riskOrder: Record<string, number> = { 높음: 0, 보통: 1, 낮음: 2 };
-  return priorities.sort((a, b) => riskOrder[a.risk_level] - riskOrder[b.risk_level]);
+  return priorities.sort(
+    (a, b) =>
+      riskOrder[a.risk_level] - riskOrder[b.risk_level] ||
+      (a.achievement_rate ?? -1) - (b.achievement_rate ?? -1)
+  );
 }

@@ -122,9 +122,10 @@ export function UniversityManagementPage() {
         title="대학별 배부·달성 관리"
         description={
           (isAdmin
-            ? '관리자는 모든 참여대학의 실적과 증빙 제출 여부를 조회·수정할 수 있습니다.'
-            : `${user?.university_name}의 실적과 증빙 제출 여부를 입력·수정할 수 있습니다.`) +
-          (isLive ? ' (실시간 구글시트 연동 중: 증빙·비고는 이 화면에서 저장되지 않고 실적값만 시트에 반영됩니다.)' : '')
+            ? '관리자는 모든 참여대학의 실적값과 비고를 조회·수정할 수 있습니다.'
+            : `${user?.university_name}의 실적값과 비고를 입력·수정할 수 있습니다.`) +
+          ' 실적값과 비고는 구글시트에 바로 반영됩니다.' +
+          (isLive ? ' (증빙 제출 여부는 시트에서 관리하지 않아 표시만 됩니다.)' : '')
         }
       />
 
@@ -216,9 +217,7 @@ export function UniversityManagementPage() {
                         value={edit.note}
                         onChange={(e) => updateField(r.result_id, 'note', e.target.value)}
                         placeholder="비고 입력"
-                        disabled={isLive}
-                        title={isLive ? '실시간 연동에서는 지원되지 않는 항목입니다.' : undefined}
-                        className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500 disabled:bg-gray-100 disabled:text-gray-400"
+                        className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
                       />
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-gray-500">{r.updated_at}</td>

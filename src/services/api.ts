@@ -308,7 +308,42 @@ export async function getPriorityIndicators(year = 2026): Promise<PriorityIndica
   } catch (err) {
     markFallback(err);
     const summaries = currentSummaries();
-    return buildPriorityIndicators(summaries);
+    return buildPriorityIndicators(summaries, localStore.priorityActions);
+  }
+}
+
+// 우선 관리 지표의 "조치 필요사항" 저장
+export interface UpdatePriorityActionPayload {
+  indicator_id: string;
+  indicator_name: string;
+  action_needed: string;
+  updated_by: string;
+  user_name: string;
+}
+
+export async function updatePriorityAction(
+  payload: UpdatePriorityActionPayload
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const data = await callGasPost<{ success: boolean; message?: string }>('updatePriorityAction', payload);
+    markLive();
+    return data;
+  } catch (err) {
+    markFallback(err);
+    localStore.priorityActions[payload.indicator_id] = payload.action_needed;
+    appendLog({
+      timestamp: nowTimestamp(),
+      user_id: payload.updated_by,
+      user_name: payload.user_name,
+      university_name: '전체',
+      action: 'update',
+      sheet_name: 'priority_actions',
+      row_id: payload.indicator_id,
+      field_name: '조치 필요사항',
+      old_value: '',
+      new_value: payload.action_needed,
+    });
+    return { success: true };
   }
 }
 

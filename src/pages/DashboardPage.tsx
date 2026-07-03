@@ -82,7 +82,7 @@ export function DashboardPage() {
                     <p className="truncate text-sm font-medium text-gray-800">{p.indicator_name}</p>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-gray-500">
-                    {p.university_name} · {p.reason}
+                    {p.category} · {p.reason}
                   </p>
                 </div>
                 <span className="shrink-0 text-sm font-semibold text-gray-700">{formatRate(p.achievement_rate)}</span>

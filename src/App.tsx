@@ -9,7 +9,6 @@ import { IndicatorsOverviewPage } from '@/pages/IndicatorsOverviewPage';
 import { IndicatorCategoryDetailPage } from '@/pages/IndicatorCategoryDetailPage';
 import { UniversityManagementPage } from '@/pages/UniversityManagementPage';
 import { PriorityIndicatorsPage } from '@/pages/PriorityIndicatorsPage';
-import { TargetSettingPage } from '@/pages/TargetSettingPage';
 import { UserManagementPage } from '@/pages/UserManagementPage';
 import { ChangeLogPage } from '@/pages/ChangeLogPage';
 
@@ -32,14 +31,6 @@ export default function App() {
               <Route path="/indicators/detail" element={<IndicatorCategoryDetailPage />} />
               <Route path="/university-results" element={<UniversityManagementPage />} />
               <Route path="/priority" element={<PriorityIndicatorsPage />} />
-              <Route
-                path="/targets"
-                element={
-                  <ProtectedRoute adminOnly>
-                    <TargetSettingPage />
-                  </ProtectedRoute>
-                }
-              />
               <Route
                 path="/users"
                 element={

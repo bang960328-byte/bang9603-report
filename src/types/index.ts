@@ -132,19 +132,17 @@ export interface DashboardData {
   evidenceStatusCounts: { status: EvidenceStatus; count: number }[];
 }
 
-// 우선 관리 지표
+// 우선 관리 지표 (지표별 집계 — 5개 대학 목표값·실적값 합산)
 export interface PriorityIndicator {
   risk_level: RiskLevel;
   indicator_id: string;
   indicator_name: string;
-  university_name: string;
-  target: number;
-  actual: number | null;
+  category: string;
+  total_target: number;
+  total_actual: number | null;
   achievement_rate: number | null;
   reason: string;
-  action_needed: string;
-  manager: string;
-  note: string;
+  action_needed: string; // 담당자가 직접 입력·저장하는 조치 필요사항
 }
 
 export interface LoginRequest {
