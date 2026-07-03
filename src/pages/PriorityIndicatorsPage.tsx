@@ -21,15 +21,18 @@ export function PriorityIndicatorsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
 
+  const isAdmin = user?.role === 'admin';
+
   useEffect(() => {
-    getPriorityIndicators().then((data) => {
+    if (!user) return;
+    getPriorityIndicators(user).then((data) => {
       setItems(data);
       const draft: Record<string, string> = {};
       data.forEach((d) => (draft[d.indicator_id] = d.action_needed));
       setActionDraft(draft);
       setIsLoading(false);
     });
-  }, []);
+  }, [user]);
 
   const filtered = useMemo(
     () => (risk === '전체' ? items : items.filter((i) => i.risk_level === risk)),
@@ -65,7 +68,12 @@ export function PriorityIndicatorsPage() {
     <div>
       <PageHeader
         title="우선 관리 지표"
-        description="달성률 80% 미만 또는 실적 미입력 지표를 지표별(5개 대학 합산 기준)로 자동 추출합니다. 조치 필요사항은 직접 입력해 저장할 수 있습니다."
+        description={
+          (isAdmin
+            ? '달성률 80% 미만 또는 실적 미입력 지표를 지표별(5개 대학 합산 기준)로 자동 추출합니다.'
+            : `${user?.university_name}의 달성률 80% 미만 또는 실적 미입력 지표를 자동 추출합니다.`) +
+          ' 조치 필요사항은 직접 입력해 저장할 수 있습니다.'
+        }
       />
       <Card>
         <div className="mb-4 flex items-end gap-3">
@@ -85,8 +93,8 @@ export function PriorityIndicatorsPage() {
                 <th className="whitespace-nowrap px-3 py-2">위험도</th>
                 <th className="whitespace-nowrap px-3 py-2">지표명</th>
                 <th className="whitespace-nowrap px-3 py-2">구분</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right">전체 목표값</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right">전체 실적값</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">{isAdmin ? '전체 목표값' : '목표값'}</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">{isAdmin ? '전체 실적값' : '실적값'}</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right">달성률</th>
                 <th className="whitespace-nowrap px-3 py-2">미흡 사유</th>
                 <th className="whitespace-nowrap px-3 py-2">조치 필요사항</th>

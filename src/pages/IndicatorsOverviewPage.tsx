@@ -16,7 +16,7 @@ type SortKey = 'indicator_id' | 'achievement_rate' | 'updated_at';
 type SortDir = 'asc' | 'desc';
 
 const STATUS_OPTIONS: (AchievementStatus | '전체')[] = ['전체', '정상', '주의', '미달', '미제출'];
-const EVIDENCE_OPTIONS: (EvidenceStatus | '전체')[] = ['전체', '제출', '미제출', '해당없음'];
+const EVIDENCE_OPTIONS: (EvidenceStatus | '전체')[] = ['전체', '예', '아니오', '해당없음'];
 
 export function IndicatorsOverviewPage() {
   const [rows, setRows] = useState<IndicatorSummary[]>([]);

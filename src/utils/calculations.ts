@@ -36,8 +36,8 @@ export const STATUS_COLOR_MAP: Record<AchievementStatus, string> = {
 };
 
 export const EVIDENCE_COLOR_MAP: Record<string, string> = {
-  제출: 'bg-blue-50 text-blue-700 border-blue-200',
-  미제출: 'bg-rose-50 text-rose-700 border-rose-200',
+  예: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  아니오: 'bg-rose-50 text-rose-700 border-rose-200',
   해당없음: 'bg-gray-100 text-gray-500 border-gray-200',
 };
 

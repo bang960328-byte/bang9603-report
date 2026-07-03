@@ -154,8 +154,8 @@ function buildUniversityResults(): UniversityResult[] {
       const evidenceStatus = c.noResult
         ? '해당없음'
         : c.missingEvidenceUniversities?.includes(uni)
-          ? '미제출'
-          : '제출';
+          ? '아니오'
+          : '예';
 
       results.push({
         result_id: `R${String(seq).padStart(3, '0')}`,
@@ -260,8 +260,8 @@ export const sampleLogs: ChangeLog[] = [
     sheet_name: 'university_results',
     row_id: 'R018',
     field_name: 'evidence_status',
-    old_value: '제출',
-    new_value: '미제출',
+    old_value: '예',
+    new_value: '아니오',
   },
   {
     log_id: 'L003',

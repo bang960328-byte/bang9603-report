@@ -7,8 +7,8 @@ export type IndicatorStatus = '사용' | '미사용';
 // 달성 상태
 export type AchievementStatus = '정상' | '주의' | '미달' | '미제출';
 
-// 증빙 제출 상태
-export type EvidenceStatus = '제출' | '미제출' | '해당없음';
+// 증빙 제출 여부 (예/아니오)
+export type EvidenceStatus = '예' | '아니오' | '해당없음';
 
 // 사용자 권한
 export type UserRole = 'admin' | 'university';

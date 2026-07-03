@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Save } from 'lucide-react';
+import { Save, Pencil } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card } from '@/components/common/Card';
 import { CategoryBadge } from '@/components/common/StatusBadge';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { dataSourceState, getIndicators, getUniversityResults, updateUniversityResult } from '@/services/api';
+import { getIndicators, getUniversityResults, updateUniversityResult } from '@/services/api';
 import type { EvidenceStatus, IndicatorSummary, UniversityResult } from '@/types';
 import { UNIVERSITIES } from '@/types';
-import { formatRate } from '@/utils/format';
-import { validateNumberInput } from '@/utils/calculations';
+import { formatNumber, formatRate } from '@/utils/format';
 
 interface EditableRow {
-  actual_result: string;
   evidence_status: EvidenceStatus;
   note: string;
+  noteOpen: boolean;
   dirty: boolean;
 }
 
@@ -31,7 +30,6 @@ export function UniversityManagementPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const isAdmin = user?.role === 'admin';
-  const isLive = dataSourceState.mode === 'live';
 
   useEffect(() => {
     if (!user) return;
@@ -42,9 +40,9 @@ export function UniversityManagementPage() {
       const initial: Record<string, EditableRow> = {};
       res.forEach((r) => {
         initial[r.result_id] = {
-          actual_result: r.actual_result === null || r.actual_result === undefined ? '' : String(r.actual_result),
-          evidence_status: r.evidence_status,
+          evidence_status: r.evidence_status === '예' || r.evidence_status === '아니오' ? r.evidence_status : '아니오',
           note: r.note,
+          noteOpen: !!r.note,
           dirty: false,
         };
       });
@@ -64,7 +62,7 @@ export function UniversityManagementPage() {
     [results, activeUniversity]
   );
 
-  const updateField = (resultId: string, field: keyof EditableRow, value: string) => {
+  const updateField = (resultId: string, field: keyof EditableRow, value: string | boolean) => {
     setEditState((prev) => ({
       ...prev,
       [resultId]: { ...prev[resultId], [field]: value, dirty: true },
@@ -76,18 +74,9 @@ export function UniversityManagementPage() {
     const edit = editState[row.result_id];
     if (!edit) return;
 
-    if (edit.actual_result !== '') {
-      const check = validateNumberInput(edit.actual_result);
-      if (!check.valid) {
-        showToast('error', check.message ?? '입력값을 확인해 주세요.');
-        return;
-      }
-    }
-
     setSavingId(row.result_id);
     const res = await updateUniversityResult({
       result_id: row.result_id,
-      actual_result: edit.actual_result === '' ? null : Number(edit.actual_result),
       evidence_status: edit.evidence_status,
       note: edit.note,
       updated_by: user.user_id,
@@ -97,16 +86,11 @@ export function UniversityManagementPage() {
     setSavingId(null);
 
     if (res.success) {
-      showToast('success', `${row.university_name} 실적이 저장되었습니다.`);
+      showToast('success', `${row.university_name} 증빙·비고가 저장되었습니다.`);
       setResults((prev) =>
         prev.map((r) =>
           r.result_id === row.result_id
-            ? {
-                ...r,
-                actual_result: edit.actual_result === '' ? null : Number(edit.actual_result),
-                evidence_status: edit.evidence_status,
-                note: edit.note,
-              }
+            ? { ...r, evidence_status: edit.evidence_status, note: edit.note }
             : r
         )
       );
@@ -122,10 +106,9 @@ export function UniversityManagementPage() {
         title="대학별 배부·달성 관리"
         description={
           (isAdmin
-            ? '관리자는 모든 참여대학의 실적값과 비고를 조회·수정할 수 있습니다.'
-            : `${user?.university_name}의 실적값과 비고를 입력·수정할 수 있습니다.`) +
-          ' 실적값과 비고는 구글시트에 바로 반영됩니다.' +
-          (isLive ? ' (증빙 제출 여부는 시트에서 관리하지 않아 표시만 됩니다.)' : '')
+            ? '관리자는 모든 참여대학의 증빙 제출 여부와 비고를 수정할 수 있습니다.'
+            : `${user?.university_name}의 증빙 제출 여부와 비고를 입력·수정할 수 있습니다.`) +
+          ' 목표값·실적값은 구글시트에서 직접 수정하며, 이 화면에서는 조회만 가능합니다.'
         }
       />
 
@@ -160,11 +143,10 @@ export function UniversityManagementPage() {
                 <th className="whitespace-nowrap px-3 py-2">지표명</th>
                 <th className="whitespace-nowrap px-3 py-2">구분</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right">배부 목표값</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right">입력 실적값</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">실적값</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right">달성률</th>
                 <th className="whitespace-nowrap px-3 py-2">증빙 제출 여부</th>
                 <th className="whitespace-nowrap px-3 py-2">비고</th>
-                <th className="whitespace-nowrap px-3 py-2">수정일</th>
                 <th className="whitespace-nowrap px-3 py-2 text-center">저장</th>
               </tr>
             </thead>
@@ -173,54 +155,53 @@ export function UniversityManagementPage() {
                 const ind = indicatorMap.get(r.indicator_id);
                 const edit = editState[r.result_id];
                 if (!edit) return null;
-                const previewRate =
-                  edit.actual_result === ''
-                    ? null
-                    : r.allocated_target > 0
-                      ? Math.round((Number(edit.actual_result) / r.allocated_target) * 1000) / 10
-                      : null;
+                const hasActual = r.actual_result !== null && r.actual_result !== undefined;
                 return (
                   <tr key={r.result_id} className="align-top hover:bg-gray-50">
                     <td className="min-w-[200px] px-3 py-2 text-gray-800">{ind?.indicator_name ?? r.indicator_id}</td>
                     <td className="whitespace-nowrap px-3 py-2">{ind && <CategoryBadge category={ind.category} />}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-right text-gray-600">
-                      {r.allocated_target.toLocaleString('ko-KR')} {ind?.unit}
+                      {formatNumber(r.allocated_target)} {ind?.unit}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      <input
-                        type="number"
-                        min={0}
-                        value={edit.actual_result}
-                        onChange={(e) => updateField(r.result_id, 'actual_result', e.target.value)}
-                        className="w-24 rounded-md border border-gray-300 px-2 py-1 text-right text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
-                      />
+                    <td className="whitespace-nowrap px-3 py-2 text-right">
+                      <span className={hasActual ? 'font-semibold text-emerald-600' : 'text-gray-300'}>
+                        {hasActual ? formatNumber(r.actual_result) : '미입력'}
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-gray-700">
-                      {formatRate(previewRate)}
+                      {formatRate(r.achievement_rate)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2">
                       <select
                         value={edit.evidence_status}
                         onChange={(e) => updateField(r.result_id, 'evidence_status', e.target.value)}
-                        disabled={isLive}
-                        title={isLive ? '실시간 연동에서는 지원되지 않는 항목입니다.' : undefined}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500 disabled:bg-gray-100 disabled:text-gray-400"
+                        className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
                       >
-                        <option value="제출">제출</option>
-                        <option value="미제출">미제출</option>
-                        <option value="해당없음">해당없음</option>
+                        <option value="예">예</option>
+                        <option value="아니오">아니오</option>
                       </select>
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        value={edit.note}
-                        onChange={(e) => updateField(r.result_id, 'note', e.target.value)}
-                        placeholder="비고 입력"
-                        className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
-                      />
+                      {edit.noteOpen ? (
+                        <input
+                          type="text"
+                          autoFocus
+                          value={edit.note}
+                          onChange={(e) => updateField(r.result_id, 'note', e.target.value)}
+                          placeholder="비고 입력"
+                          className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => updateField(r.result_id, 'noteOpen', true)}
+                          className="inline-flex items-center gap-1 rounded-md border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-navy-400 hover:text-navy-600"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          {edit.note ? edit.note : '비고'}
+                        </button>
+                      )}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-gray-500">{r.updated_at}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-center">
                       <button
                         type="button"

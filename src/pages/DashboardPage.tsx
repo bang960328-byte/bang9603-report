@@ -12,18 +12,21 @@ import { getDashboardData, getPriorityIndicators } from '@/services/api';
 import type { DashboardData, PriorityIndicator } from '@/types';
 import { formatNumber, formatRate } from '@/utils/format';
 import { useAutoRefresh } from '@/utils/useAutoRefresh';
+import { useAuth } from '@/context/AuthContext';
 
 export function DashboardPage() {
+  const { user } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [priorities, setPriorities] = useState<PriorityIndicator[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const [dashboard, priority] = await Promise.all([getDashboardData(), getPriorityIndicators()]);
+    if (!user) return;
+    const [dashboard, priority] = await Promise.all([getDashboardData(), getPriorityIndicators(user)]);
     setData(dashboard);
     setPriorities(priority.slice(0, 5));
     setIsLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     load();

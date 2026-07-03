@@ -43,14 +43,14 @@ export function buildIndicatorSummaries(
     const rate = hasAnyActual ? calculateAchievementRate(displayActual, totalTarget) : null;
     const status: AchievementStatus = getAchievementStatus(rate, hasAnyActual);
 
-    const evidenceSubmitted = relatedResults.filter((r) => r.evidence_status === '제출').length;
+    const evidenceSubmitted = relatedResults.filter((r) => r.evidence_status === '예').length;
     const evidenceRequired = relatedResults.filter((r) => r.evidence_status !== '해당없음').length;
     const evidenceStatus =
       evidenceRequired === 0
         ? '해당없음'
         : evidenceSubmitted === evidenceRequired
-          ? '제출'
-          : '미제출';
+          ? '예'
+          : '아니오';
 
     const latestUpdatedAt = relatedResults
       .map((r) => r.updated_at)
@@ -94,7 +94,7 @@ export function buildDashboardData(
   });
 
   const underAchievedCount = summaries.filter((s) => s.status === '미달').length;
-  const evidenceMissingCount = results.filter((r) => r.evidence_status === '미제출').length;
+  const evidenceMissingCount = results.filter((r) => r.evidence_status === '아니오').length;
 
   const universityNames = Array.from(new Set(results.map((r) => r.university_name)));
   const universityRates = universityNames.map((uni) => {
@@ -112,7 +112,7 @@ export function buildDashboardData(
     }))
     .sort((a, b) => b.rate - a.rate);
 
-  const evidenceStatusCounts = (['제출', '미제출', '해당없음'] as const).map((status) => ({
+  const evidenceStatusCounts = (['예', '아니오', '해당없음'] as const).map((status) => ({
     status,
     count: results.filter((r) => r.evidence_status === status).length,
   }));
@@ -132,15 +132,26 @@ export function buildDashboardData(
 
 export function buildPriorityIndicators(
   summaries: IndicatorSummary[],
-  actions: Record<string, string> = {}
+  actions: Record<string, string> = {},
+  scopeUniversity = '' // 값이 있으면 해당 대학의 목표·실적 기준으로만 판정
 ): PriorityIndicator[] {
   const priorities: PriorityIndicator[] = [];
 
   summaries.forEach((summary) => {
-    const hasAnyActual = summary.universityResults.some(
+    // 대학 담당자: 본인 대학 실적만, 관리자: 5개 대학 합산
+    const scopedResults = scopeUniversity
+      ? summary.universityResults.filter((r) => r.university_name === scopeUniversity)
+      : summary.universityResults;
+    if (scopedResults.length === 0) return;
+
+    const hasAnyActual = scopedResults.some(
       (r) => r.actual_result !== null && r.actual_result !== undefined
     );
-    const rate = summary.achievement_rate;
+    const totalTarget = scopedResults.reduce((sum, r) => sum + (r.allocated_target || 0), 0);
+    const totalActual = scopedResults.reduce((sum, r) => sum + (r.actual_result ?? 0), 0);
+    const rate = scopeUniversity
+      ? calculateAchievementRate(hasAnyActual ? totalActual : null, totalTarget)
+      : summary.achievement_rate;
 
     // 우선 관리 대상: 실적 미입력 또는 달성률 80% 미만
     if (hasAnyActual && rate !== null && rate >= 80) return;
@@ -163,8 +174,8 @@ export function buildPriorityIndicators(
       indicator_id: summary.indicator_id,
       indicator_name: summary.indicator_name,
       category: summary.category,
-      total_target: summary.total_target,
-      total_actual: hasAnyActual ? summary.total_actual : null,
+      total_target: totalTarget,
+      total_actual: hasAnyActual ? totalActual : null,
       achievement_rate: rate,
       reason,
       action_needed: actions[summary.indicator_id] ?? '',

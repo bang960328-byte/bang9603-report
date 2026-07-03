@@ -158,9 +158,59 @@ function getIndicatorNameMap_() {
   return { idToName, nameToId, canonical };
 }
 
+// 증빙 제출 여부(예/아니오)를 저장하는 시트. 실제 시트에는 이 값이 없어 별도 관리하며,
+// 최초 호출 시 자동 생성된다.
+function ensureEvidenceSheet_() {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName('evidence_status');
+  if (sheet) return sheet;
+  sheet = ss.insertSheet('evidence_status');
+  sheet.appendRow(['result_id', 'university_name', 'indicator_name', 'evidence_status', 'updated_by', 'updated_at']);
+  return sheet;
+}
+
+function readEvidenceStatuses_() {
+  const sheet = ensureEvidenceSheet_();
+  const values = sheet.getDataRange().getValues();
+  const map = {};
+  for (let r = 1; r < values.length; r++) {
+    const id = String(values[r][0] || '').trim();
+    if (id) map[id] = String(values[r][3] || '아니오');
+  }
+  return map;
+}
+
+function writeEvidenceStatus_(payload) {
+  const sheet = ensureEvidenceSheet_();
+  const values = sheet.getDataRange().getValues();
+  const timestamp = nowTimestamp_();
+  let rowNumber = null;
+  for (let r = 1; r < values.length; r++) {
+    if (String(values[r][0]) === String(payload.result_id)) {
+      rowNumber = r + 1;
+      break;
+    }
+  }
+  if (rowNumber) {
+    sheet.getRange(rowNumber, 4).setValue(payload.evidence_status);
+    sheet.getRange(rowNumber, 5).setValue(payload.updated_by || '');
+    sheet.getRange(rowNumber, 6).setValue(timestamp);
+  } else {
+    sheet.appendRow([
+      payload.result_id,
+      payload.university_name || '',
+      payload.indicator_name || '',
+      payload.evidence_status,
+      payload.updated_by || '',
+      timestamp,
+    ]);
+  }
+}
+
 /** 5개 대학 탭을 모두 읽어 지표별·대학별 실적 배열로 결합한다 */
 function buildAllUniversityResults_() {
   const { nameToId } = getIndicatorNameMap_();
+  const evidenceMap = readEvidenceStatuses_();
   const results = [];
 
   UNIVERSITY_SHEET_NAMES.forEach((sheetName) => {
@@ -173,16 +223,17 @@ function buildAllUniversityResults_() {
       const allocated = r.target || 0;
       const actual = r.actual;
       const rate = calculateAchievementRate_(actual, allocated);
+      const resultId = sheetName + '__' + indicatorId;
 
       results.push({
-        result_id: sheetName + '__' + indicatorId,
+        result_id: resultId,
         year: DEFAULT_YEAR,
         indicator_id: indicatorId,
         university_name: displayName,
         allocated_target: allocated,
         actual_result: actual,
         achievement_rate: rate,
-        evidence_status: '해당없음', // 증빙 제출 여부는 이 시트에서 추적하지 않음
+        evidence_status: evidenceMap[resultId] || '아니오',
         note: r.note,
         manager_name: r.manager,
         updated_by: r.manager || '',
@@ -206,6 +257,8 @@ function buildIndicatorSummaries_() {
     const rate = hasAnyActual ? calculateAchievementRate_(totalActual, totalTarget) : null;
     const status = getAchievementStatus_(rate, hasAnyActual);
     const notes = related.map((r) => r.note).filter(Boolean);
+    const submittedCount = related.filter((r) => r.evidence_status === '예').length;
+    const evidenceStatus = related.length === 0 ? '해당없음' : submittedCount === related.length ? '예' : '아니오';
 
     return {
       indicator_id: ind.indicator_id,
@@ -218,7 +271,7 @@ function buildIndicatorSummaries_() {
       total_actual: totalActual,
       achievement_rate: rate,
       status: status,
-      evidence_status: '해당없음',
+      evidence_status: evidenceStatus,
       note: notes[0] || '',
       updated_at: nowTimestamp_(),
       universityResults: related,
@@ -252,9 +305,9 @@ function getDashboardData_() {
     .map((s) => ({ indicator_name: s.indicator_name, rate: s.achievement_rate, category: s.category }))
     .sort((a, b) => b.rate - a.rate);
 
-  const evidenceStatusCounts = ['제출', '미제출', '해당없음'].map((status) => ({
+  const evidenceStatusCounts = ['예', '아니오', '해당없음'].map((status) => ({
     status: status,
-    count: status === '해당없음' ? results.length : 0,
+    count: results.filter((r) => r.evidence_status === status).length,
   }));
 
   return {
@@ -262,7 +315,7 @@ function getDashboardData_() {
     categoryCount: categories.length,
     averageAchievementRate: average_(rates),
     underAchievedCount: summaries.filter((s) => s.status === '미달').length,
-    evidenceMissingCount: 0,
+    evidenceMissingCount: results.filter((r) => r.evidence_status === '아니오').length,
     categoryBreakdown: categoryBreakdown,
     universityRates: universityRates,
     indicatorRanking: indicatorRanking,
@@ -312,14 +365,9 @@ function parseResultId_(resultId) {
   return { sheetName: sheetName, indicatorId: indicatorId };
 }
 
+// 목표값(F열)·실적값(G열)은 대시보드에서 더 이상 수정할 수 없다 — 구글시트에서 직접 입력해야
+// 하며, 이 함수는 비고(I열)와 증빙 제출 여부만 저장한다.
 function updateUniversityResult_(payload) {
-  if (payload.actual_result !== undefined && payload.actual_result !== null && Number(payload.actual_result) < 0) {
-    return { success: false, message: '음수는 입력할 수 없습니다.' };
-  }
-  if (payload.allocated_target !== undefined && Number(payload.allocated_target) < 0) {
-    return { success: false, message: '음수는 입력할 수 없습니다.' };
-  }
-
   const parsed = parseResultId_(payload.result_id);
   if (!parsed) return { success: false, message: '대상 실적 데이터를 찾을 수 없습니다.' };
 
@@ -334,26 +382,6 @@ function updateUniversityResult_(payload) {
   const timestamp = nowTimestamp_();
   const displayName = SHEET_TO_DISPLAY_NAME[parsed.sheetName];
 
-  if (payload.actual_result !== undefined) {
-    const before = sheet.getRange(rowNumber, COL.ACTUAL + 1).getValue();
-    sheet.getRange(rowNumber, COL.ACTUAL + 1).setValue(payload.actual_result === null ? '' : Number(payload.actual_result));
-    appendLog_({
-      timestamp: timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: displayName,
-      action: 'update', sheet_name: parsed.sheetName, row_id: indicatorName,
-      field_name: '실적(G열)', old_value: before, new_value: payload.actual_result,
-    });
-  }
-
-  if (payload.allocated_target !== undefined) {
-    const before = sheet.getRange(rowNumber, COL.TARGET + 1).getValue();
-    sheet.getRange(rowNumber, COL.TARGET + 1).setValue(Number(payload.allocated_target));
-    appendLog_({
-      timestamp: timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: displayName,
-      action: 'update', sheet_name: parsed.sheetName, row_id: indicatorName,
-      field_name: '목표값(F열)', old_value: before, new_value: payload.allocated_target,
-    });
-  }
-
   // 비고(I열) 저장 — 화면에서 읽어오는 것과 같은 열에 그대로 기록한다.
   if (payload.note !== undefined) {
     const before = sheet.getRange(rowNumber, COL.NOTE + 1).getValue();
@@ -367,7 +395,21 @@ function updateUniversityResult_(payload) {
     }
   }
 
-  // 증빙 제출 여부는 이 시트에서 관리하지 않으므로 저장 요청이 와도 무시한다.
+  // 증빙 제출 여부(예/아니오) — 실제 시트에는 없는 값이라 별도의 evidence_status 시트에 저장한다.
+  if (payload.evidence_status !== undefined) {
+    writeEvidenceStatus_({
+      result_id: payload.result_id,
+      university_name: displayName,
+      indicator_name: indicatorName,
+      evidence_status: payload.evidence_status,
+      updated_by: payload.updated_by,
+    });
+    appendLog_({
+      timestamp: timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: displayName,
+      action: 'update', sheet_name: 'evidence_status', row_id: indicatorName,
+      field_name: '증빙 제출 여부', old_value: '', new_value: payload.evidence_status,
+    });
+  }
 
   return { success: true };
 }

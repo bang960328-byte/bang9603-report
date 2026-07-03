@@ -8,8 +8,8 @@ interface EvidenceDatum {
 
 // 상태 색상은 카테고리 색과 구분되는 고정 팔레트(양호/위험/중립) 사용
 const STATUS_COLOR: Record<EvidenceStatus, string> = {
-  제출: '#0ca30c',
-  미제출: '#d03b3b',
+  예: '#0ca30c',
+  아니오: '#d03b3b',
   해당없음: '#898781',
 };
 

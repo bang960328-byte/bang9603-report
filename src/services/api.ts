@@ -300,15 +300,20 @@ export async function updateTarget(
 // ---------------------------------------------------------------------------
 // 7. getPriorityIndicators
 // ---------------------------------------------------------------------------
-export async function getPriorityIndicators(year = 2026): Promise<PriorityIndicator[]> {
+export async function getPriorityIndicators(user: AuthUser, year = 2026): Promise<PriorityIndicator[]> {
+  const scopeUniversity = user.role === 'university' ? user.university_name : '';
   try {
-    const data = await callGasGet<PriorityIndicator[]>('getPriorityIndicators', { year: String(year) });
+    const data = await callGasGet<PriorityIndicator[]>('getPriorityIndicators', {
+      year: String(year),
+      role: user.role,
+      university_name: user.university_name,
+    });
     markLive();
     return data;
   } catch (err) {
     markFallback(err);
     const summaries = currentSummaries();
-    return buildPriorityIndicators(summaries, localStore.priorityActions);
+    return buildPriorityIndicators(summaries, localStore.priorityActions, scopeUniversity);
   }
 }
 
