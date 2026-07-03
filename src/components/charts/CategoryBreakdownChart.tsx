@@ -8,17 +8,28 @@ interface CategoryDatum {
 
 export function CategoryBreakdownChart({ data }: { data: CategoryDatum[] }) {
   const sorted = [...data].sort((a, b) => b.averageRate - a.averageRate);
+  const maxRate = Math.max(120, ...sorted.map((d) => d.averageRate));
+  // 축 상한을 10 단위로 올림해 가장 높은 막대와 라벨이 잘리지 않도록 여유를 둔다
+  const axisMax = Math.ceil((maxRate + 15) / 10) * 10;
 
   return (
     <ResponsiveContainer width="100%" height={Math.max(220, sorted.length * 34)}>
-      <BarChart data={sorted} layout="vertical" margin={{ top: 0, right: 32, left: 8, bottom: 0 }}>
+      <BarChart data={sorted} layout="vertical" margin={{ top: 0, right: 44, left: 8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e1e0d9" horizontal={false} />
-        <XAxis type="number" domain={[0, 120]} tick={{ fontSize: 11, fill: '#898781' }} axisLine={false} tickLine={false} unit="%" />
+        <XAxis
+          type="number"
+          domain={[0, axisMax]}
+          tick={{ fontSize: 11, fill: '#898781' }}
+          axisLine={false}
+          tickLine={false}
+          unit="%"
+        />
         <YAxis
           type="category"
           dataKey="category"
-          width={170}
-          tick={{ fontSize: 12, fill: '#0b0b0b' }}
+          width={200}
+          interval={0}
+          tick={{ fontSize: 11, fill: '#0b0b0b' }}
           axisLine={false}
           tickLine={false}
         />
