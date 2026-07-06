@@ -132,11 +132,11 @@ export function IndicatorsOverviewPage() {
   }, [rows]);
 
   const csvHeaders = [
-    '지표ID', '연도', '구분', '지표명', '단위', '목표값', '실적값', '달성률', '상태', '증빙', '비고', '수정일',
+    '지표ID', '연도', '구분', '지표명', '단위', '목표값', '실적값', '달성률', '상태', '증빙', '수정일',
   ];
   const csvRows = filtered.map((r) => [
     r.indicator_id, r.year, r.category, r.indicator_name, r.unit,
-    r.total_target ?? '-', r.total_actual ?? '', formatRate(r.achievement_rate), r.status, r.evidence_status, r.note, r.updated_at,
+    r.total_target ?? '-', r.total_actual ?? '', formatRate(r.achievement_rate), r.status, r.evidence_status, r.updated_at,
   ]);
 
   return (
@@ -195,7 +195,6 @@ export function IndicatorsOverviewPage() {
                 </th>
                 <th className="whitespace-nowrap px-3 py-2">상태</th>
                 <th className="whitespace-nowrap px-3 py-2">증빙</th>
-                <th className="whitespace-nowrap px-3 py-2">비고</th>
                 <th className="cursor-pointer select-none whitespace-nowrap px-3 py-2" onClick={() => toggleSort('updated_at')}>
                   <span className="inline-flex items-center gap-1">수정일 {sortIcon('updated_at')}</span>
                 </th>
@@ -216,7 +215,6 @@ export function IndicatorsOverviewPage() {
                   </td>
                   <td className="whitespace-nowrap px-3 py-2"><StatusBadge status={r.status} /></td>
                   <td className="whitespace-nowrap px-3 py-2"><EvidenceBadge status={r.evidence_status} /></td>
-                  <td className="max-w-[160px] truncate px-3 py-2 text-gray-500" title={r.note}>{r.note || '-'}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-500">{r.updated_at}</td>
                 </tr>
               ))}
