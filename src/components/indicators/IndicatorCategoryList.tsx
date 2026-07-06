@@ -52,14 +52,14 @@ export function IndicatorCategoryList({ category }: { category: IndicatorCategor
                   {item.status === '정상' && (
                     <span className="text-xs font-medium text-emerald-600">목표 달성 완료</span>
                   )}
-                  {item.status === '달성지표' && (
+                  {item.total_target === null && (
                     <span className="text-xs font-medium text-blue-600">3차년도 목표값 없음</span>
                   )}
                 </div>
                 <p className="mt-1 text-xs text-gray-500">{item.description}</p>
               </div>
               <div className="w-48 shrink-0">
-                {item.status === '달성지표' ? (
+                {item.total_target === null ? (
                   <p className="text-right text-xs text-gray-400">달성률 계산 대상 아님</p>
                 ) : (
                   <ProgressBar rate={item.achievement_rate} />

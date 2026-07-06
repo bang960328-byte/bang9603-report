@@ -23,7 +23,7 @@ interface IndicatorConfig {
   name: string;
   unit: string;
   description: string;
-  totalTarget: number | null; // null이면 3차년도 목표값이 없는 지표(달성지표로 표시)
+  totalTarget: number | null; // null이면 3차년도 목표값이 없는 지표(달성률 계산 없이 '미제출'로 표시)
   isRateType?: boolean;
   factor: number; // 전체 목표 대비 실적 달성 비율(기본값)
   noResult?: boolean;

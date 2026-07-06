@@ -21,7 +21,7 @@ export function buildIndicatorSummaries(
 ): IndicatorSummary[] {
   return indicators.map((ind) => {
     const target = targets.find((t) => t.indicator_id === ind.indicator_id);
-    // total_target이 null이면 3차년도 목표값 자체가 없는 지표(달성지표)
+    // total_target이 null이면 3차년도 목표값 자체가 없는 지표 — 달성률 계산 없이 '미제출'로 표시
     const hasNoTarget = !!target && target.total_target === null;
     const totalTarget = hasNoTarget ? null : (target?.total_target ?? 0);
     const relatedResults = results.filter((r) => r.indicator_id === ind.indicator_id);
@@ -43,7 +43,7 @@ export function buildIndicatorSummaries(
       : totalActual;
 
     const rate = !hasNoTarget && hasAnyActual ? calculateAchievementRate(displayActual, totalTarget ?? 0) : null;
-    const status: AchievementStatus = hasNoTarget ? '달성지표' : getAchievementStatus(rate, hasAnyActual);
+    const status: AchievementStatus = getAchievementStatus(rate, hasAnyActual);
 
     const evidenceSubmitted = relatedResults.filter((r) => r.evidence_status === '예').length;
     const evidenceRequired = relatedResults.filter((r) => r.evidence_status !== '해당없음').length;
@@ -140,7 +140,7 @@ export function buildPriorityIndicators(
   const priorities: PriorityIndicator[] = [];
 
   summaries.forEach((summary) => {
-    if (summary.status === '달성지표') return; // 3차 목표가 없는 지표는 우선 관리 대상에서 제외
+    if (summary.total_target === null) return; // 3차 목표가 없는 지표는 우선 관리 대상에서 제외
 
     // 대학 담당자: 본인 대학 실적만, 관리자: 5개 대학 합산
     const scopedResults = scopeUniversity

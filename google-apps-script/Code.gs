@@ -367,7 +367,8 @@ function buildIndicatorSummaries_() {
     const totalTarget = overviewTarget === undefined ? allocatedSum : (overviewTarget === null ? null : overviewTarget);
 
     const rate = !hasNoTarget && hasAnyActual ? calculateAchievementRate_(totalActual, totalTarget || 0) : null;
-    const status = hasNoTarget ? '달성지표' : getAchievementStatus_(rate, hasAnyActual);
+    // 목표값이 없는 지표는 rate가 항상 null이므로 getAchievementStatus_가 자동으로 '미제출'을 반환한다.
+    const status = getAchievementStatus_(rate, hasAnyActual);
     const notes = related.map((r) => r.note).filter(Boolean);
     const submittedCount = related.filter((r) => r.evidence_status === '예').length;
     const evidenceStatus = related.length === 0 ? '해당없음' : submittedCount === related.length ? '예' : '아니오';
@@ -613,7 +614,7 @@ function getPriorityIndicators_() {
   const priorities = [];
 
   summaries.forEach((summary) => {
-    if (summary.status === '달성지표') return; // 3차 목표가 없는 지표는 우선 관리 대상에서 제외
+    if (summary.total_target === null) return; // 3차 목표가 없는 지표는 우선 관리 대상에서 제외
 
     const hasActual = summary.universityResults.some(
       (r) => r.actual_result !== null && r.actual_result !== undefined

@@ -15,7 +15,7 @@ import { useAutoRefresh } from '@/utils/useAutoRefresh';
 type SortKey = 'indicator_id' | 'achievement_rate' | 'updated_at';
 type SortDir = 'asc' | 'desc';
 
-const STATUS_OPTIONS: (AchievementStatus | '전체')[] = ['전체', '정상', '주의', '미달', '미제출', '달성지표'];
+const STATUS_OPTIONS: (AchievementStatus | '전체')[] = ['전체', '정상', '주의', '미달', '미제출'];
 const EVIDENCE_OPTIONS: (EvidenceStatus | '전체')[] = ['전체', '예', '아니오', '해당없음'];
 
 export function IndicatorsOverviewPage() {
@@ -81,17 +81,17 @@ export function IndicatorsOverviewPage() {
         total_target: uniResult?.allocated_target ?? 0,
         total_actual: uniResult?.actual_result ?? null,
         achievement_rate: uniResult?.achievement_rate ?? null,
-        status: (r.status === '달성지표'
-          ? '달성지표'
-          : uniResult
-            ? uniResult.actual_result === null || uniResult.actual_result === undefined
+        status: (uniResult
+          ? uniResult.actual_result === null || uniResult.actual_result === undefined
+            ? '미제출'
+            : uniResult.achievement_rate === null
               ? '미제출'
-              : (uniResult.achievement_rate ?? 0) >= 100
+              : uniResult.achievement_rate >= 100
                 ? '정상'
-                : (uniResult.achievement_rate ?? 0) >= 80
+                : uniResult.achievement_rate >= 80
                   ? '주의'
                   : '미달'
-            : '미제출') as AchievementStatus,
+          : '미제출') as AchievementStatus,
         evidence_status: uniResult?.evidence_status ?? '해당없음',
         note: uniResult?.note ?? '',
         updated_at: uniResult?.updated_at ?? r.updated_at,
