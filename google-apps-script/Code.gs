@@ -417,6 +417,45 @@ function debugNameMatch_() {
   };
 }
 
+function columnIndexToLetter_(index0based) {
+  let n = index0based + 1;
+  let letters = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    letters = String.fromCharCode(65 + rem) + letters;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letters;
+}
+
+// "자율지표" 구간처럼 핵심지표(A~M열)와 다른 열 배치를 쓰는 부분을 찾기 위해,
+// 지정한 행 범위의 비어있지 않은 셀만 열 위치와 함께 그대로 보여준다.
+// ?action=debugOverviewWide&startRow=29&endRow=80 형태로 호출한다(생략 시 기본값 사용).
+function debugOverviewWide_(params) {
+  const sheet = getSpreadsheet_().getSheetByName(OVERVIEW_SHEET_NAME);
+  if (!sheet) return { message: '총괄 시트를 찾을 수 없습니다.' };
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  const startRow = params && params.startRow ? Number(params.startRow) : 1;
+  const endRow = Math.min(lastRow, params && params.endRow ? Number(params.endRow) : lastRow);
+  if (startRow < 1 || endRow < startRow) return { message: '유효하지 않은 행 범위입니다.', lastRow: lastRow, lastCol: lastCol };
+
+  const numRows = endRow - startRow + 1;
+  const values = sheet.getRange(startRow, 1, numRows, lastCol).getValues();
+
+  const rows = values.map((row, idx) => {
+    const cells = [];
+    row.forEach((cell, c) => {
+      const str = String(cell === null || cell === undefined ? '' : cell).trim();
+      if (str !== '') cells.push({ col: columnIndexToLetter_(c), value: cell });
+    });
+    return { sheet_row: startRow + idx, cells: cells };
+  });
+
+  return { last_row: lastRow, last_col: lastCol, start_row: startRow, end_row: endRow, rows: rows };
+}
+
 // ---------------------------------------------------------------------------
 // 1. getDashboardData
 // ---------------------------------------------------------------------------
@@ -817,6 +856,8 @@ function routeAction_(action, params) {
       return { success: true, data: getChangeLogs_() };
     case 'debugNameMatch':
       return { success: true, data: debugNameMatch_() };
+    case 'debugOverviewWide':
+      return { success: true, data: debugOverviewWide_(params) };
     default:
       return { success: false, message: '알 수 없는 요청입니다: ' + action };
   }
