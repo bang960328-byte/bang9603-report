@@ -262,16 +262,29 @@ function readOverviewRawRows_() {
   const numRows = lastRow - OVERVIEW_DATA_START_ROW + 1;
   const values = sheet.getRange(OVERVIEW_DATA_START_ROW, 1, numRows, numCols).getValues();
 
+  // 총괄 탭은 "핵심지표" 구간(대분류/중분류/지표명 3단, B=중분류·C=지표명)과 이어지는
+  // "자율지표" 구간(중분류 없이 대분류/지표명 2단, B=지표명·C는 비어있음)이 한 표 안에 섞여
+  // 있다. C열이 채워진 행은 기존대로 B열을 중분류로 쓰고, C열이 비어있는데 B열에 값이 있는
+  // 행은 그 B열 값을 지표명 자체로 취급한다(이 구간은 중분류 개념이 없음).
   let lastSubcategory = '';
   const rows = [];
   values.forEach((row, idx) => {
-    const subRaw = String(row[OVERVIEW_SUBCATEGORY_COL] || '').trim();
-    if (subRaw) lastSubcategory = subRaw;
-    const name = String(row[OVERVIEW_NAME_COL] || '').trim();
-    if (!name) return;
+    const cVal = String(row[OVERVIEW_NAME_COL] || '').trim();
+    const bVal = String(row[OVERVIEW_SUBCATEGORY_COL] || '').trim();
+    let name, subcategory;
+    if (cVal) {
+      if (bVal) lastSubcategory = bVal;
+      name = cVal;
+      subcategory = lastSubcategory;
+    } else if (bVal) {
+      name = bVal;
+      subcategory = '';
+    } else {
+      return;
+    }
     rows.push({
       sheet_row: OVERVIEW_DATA_START_ROW + idx,
-      subcategory: lastSubcategory,
+      subcategory: subcategory,
       name: name,
       raw_third_year_value: row[thirdYearCol],
       target: parseNumberCell_(row[thirdYearCol]),
