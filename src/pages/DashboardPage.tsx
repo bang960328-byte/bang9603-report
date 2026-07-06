@@ -45,7 +45,7 @@ export function DashboardPage() {
         <StatCard label="지표 대분류" value={formatNumber(data.categoryCount)} unit="개" icon={Layers} />
         <StatCard label="전체 평균 달성률" value={formatRate(data.averageAchievementRate)} icon={Gauge} tone="success" />
         <StatCard label="미달성 지표" value={formatNumber(data.underAchievedCount)} unit="개" icon={AlertTriangle} tone="danger" />
-        <StatCard label="증빙 미제출" value={formatNumber(data.evidenceMissingCount)} unit="건" icon={FileWarning} tone="warning" />
+        <StatCard label="증빙 미제출(대학별)" value={formatNumber(data.evidenceMissingCount)} unit="건" icon={FileWarning} tone="warning" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
