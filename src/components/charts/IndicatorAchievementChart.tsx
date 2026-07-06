@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 interface RankingDatum {
   indicator_name: string;
@@ -13,8 +13,42 @@ interface CategoryDatum {
   count: number;
 }
 
-// 총괄 탭 기준 자율지표 대분류 — 대학혁신부터가 자율지표, 그 앞은 전부 핵심지표
-const AUTONOMOUS_CATEGORIES = ['대학혁신', '지역혁신', '산업혁신', '글로벌혁신'];
+// 총괄 탭 원래 순서 — 지수 이름의 공백·줄바꿈을 정규화한 값으로 비교한다
+// (병합 셀 forward-fill로 인해 실제 시트의 대분류 값에는 줄바꿈이 섞여 들어오는 경우가 있음)
+const CORE_CATEGORY_ORDER = [
+  '교원확보지수',
+  '교육과정및교과목개발/개선지수',
+  '교육과정및교과목운영지수',
+  '제도화운영지수',
+  '인프라운영지수',
+  '지·산·학프로젝트교과운영건수',
+  '일반학습자교육콘텐츠공유지수',
+  '교육과정및교과목이수지수',
+  '공유교과목이수지수',
+  '지·산·학프로젝트교과이수지수',
+  '교육만족도',
+  '진로성과지수',
+];
+// 자율지표 — 대학혁신부터가 자율지표, 그 앞은 전부 핵심지표
+const AUTONOMOUS_CATEGORY_ORDER = ['대학혁신', '지역혁신', '산업혁신', '글로벌혁신'];
+
+const ACHIEVED_COLOR = '#059669'; // 100% 이상
+const UNDER_COLOR = '#e11d48'; // 100% 미만
+
+function normalizeCategoryKey(category: string): string {
+  return category.replace(/\s+/g, '');
+}
+
+function isAutonomousCategory(category: string): boolean {
+  return AUTONOMOUS_CATEGORY_ORDER.includes(normalizeCategoryKey(category));
+}
+
+function categoryOrderIndex(category: string): number {
+  const key = normalizeCategoryKey(category);
+  const list = isAutonomousCategory(category) ? AUTONOMOUS_CATEGORY_ORDER : CORE_CATEGORY_ORDER;
+  const idx = list.indexOf(key);
+  return idx === -1 ? list.length : idx;
+}
 
 function average(nums: number[]): number {
   if (nums.length === 0) return 0;
@@ -52,14 +86,10 @@ function CategoryBarGroup({
             formatter={(value, _name, item) => [`${value}% (지표 ${item.payload.count}개)`, '평균 달성률']}
             contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: '#e1e0d9' }}
           />
-          <Bar
-            dataKey="rate"
-            fill="#2a78d6"
-            radius={[0, 4, 4, 0]}
-            maxBarSize={20}
-            cursor="pointer"
-            onClick={(entry) => onToggle(entry.category)}
-          >
+          <Bar dataKey="rate" radius={[0, 4, 4, 0]} maxBarSize={20} cursor="pointer" onClick={(entry) => onToggle(entry.category)}>
+            {categoryData.map((d) => (
+              <Cell key={d.category} fill={d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR} />
+            ))}
             <LabelList dataKey="rate" position="right" formatter={(v: number) => `${v}%`} style={{ fontSize: 11, fill: '#0b0b0b' }} />
           </Bar>
         </BarChart>
@@ -78,7 +108,10 @@ function CategoryBarGroup({
                 labelFormatter={(_label, payload) => payload?.[0]?.payload?.indicator_name ?? ''}
                 contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: '#e1e0d9' }}
               />
-              <Bar dataKey="rate" fill="#5b8def" radius={[0, 4, 4, 0]} maxBarSize={16}>
+              <Bar dataKey="rate" radius={[0, 4, 4, 0]} maxBarSize={16}>
+                {expandedItems.map((d) => (
+                  <Cell key={d.indicator_name} fill={d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR} />
+                ))}
                 <LabelList dataKey="rate" position="right" formatter={(v: number) => `${v}%`} style={{ fontSize: 10, fill: '#0b0b0b' }} />
               </Bar>
             </BarChart>
@@ -103,9 +136,10 @@ export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
       rate: average(rates),
       count: rates.length,
     }));
+    const byCanonicalOrder = (a: CategoryDatum, b: CategoryDatum) => categoryOrderIndex(a.category) - categoryOrderIndex(b.category);
     return {
-      coreCategories: all.filter((d) => !AUTONOMOUS_CATEGORIES.includes(d.category)).sort((a, b) => b.rate - a.rate),
-      autonomousCategories: all.filter((d) => AUTONOMOUS_CATEGORIES.includes(d.category)).sort((a, b) => b.rate - a.rate),
+      coreCategories: all.filter((d) => !isAutonomousCategory(d.category)).sort(byCanonicalOrder),
+      autonomousCategories: all.filter((d) => isAutonomousCategory(d.category)).sort(byCanonicalOrder),
     };
   }, [data]);
 
@@ -124,7 +158,17 @@ export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
 
   return (
     <div className="space-y-6">
-      <p className="text-xs text-gray-400">막대를 클릭하면 지수 내 세부 지표가 아래에 펼쳐집니다.</p>
+      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400">
+        <span>막대를 클릭하면 지수 내 세부 지표가 아래에 펼쳐집니다.</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: ACHIEVED_COLOR }} />
+          100% 이상
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: UNDER_COLOR }} />
+          100% 미만
+        </span>
+      </div>
       <CategoryBarGroup
         title="핵심지표"
         categoryData={coreCategories}
