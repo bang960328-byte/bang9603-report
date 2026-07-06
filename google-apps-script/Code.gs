@@ -154,7 +154,9 @@ function getIndicatorNameMap_() {
   const nameToId = {};
   canonical.forEach((c) => {
     idToName[c.indicator_id] = c.indicator_name;
-    nameToId[c.indicator_name] = c.indicator_id;
+    // 대학별 탭마다 같은 지표를 표기하는 방식이 미묘하게 달라(공백, 화살표 기호 등) 완전
+    // 일치 비교로는 다른 대학 탭의 행을 못 찾는 경우가 많으므로 정규화한 이름을 키로 쓴다.
+    nameToId[normalizeIndicatorName_(c.indicator_name)] = c.indicator_id;
   });
   return { idToName, nameToId, canonical };
 }
@@ -318,7 +320,7 @@ function buildAllUniversityResults_() {
     const displayName = SHEET_TO_DISPLAY_NAME[sheetName];
     const rows = readUniversitySheetRows_(sheetName);
     rows.forEach((r) => {
-      const indicatorId = nameToId[r.indicator_name];
+      const indicatorId = nameToId[normalizeIndicatorName_(r.indicator_name)];
       if (!indicatorId) return; // 기준 탭(강원대학교)에 없는 지표명은 구조 불일치로 간주해 제외
 
       const allocated = r.target || 0;
@@ -470,6 +472,48 @@ function debugOverviewWide_(params) {
   return { last_row: lastRow, last_col: lastCol, start_row: startRow, end_row: endRow, rows: rows };
 }
 
+// 특정 지표의 대학별 실적 합산 과정을 그대로 보여준다. 총괄 탭의 대학별 배부값·달성값과
+// 대조해서 어느 대학 탭에서 실적/목표가 잘못 읽히는지 찾을 때 쓴다.
+// ?action=debugIndicatorDetail&indicatorId=IND28 또는 &name=컨소 간 대학 간 연계 교과목 이수자 수
+function debugIndicatorDetail_(params) {
+  const { canonical, nameToId } = getIndicatorNameMap_();
+  let indicatorId = params && params.indicatorId;
+  if (!indicatorId && params && params.name) {
+    indicatorId = nameToId[String(params.name).trim()];
+  }
+  if (!indicatorId) return { message: 'indicatorId 또는 name 파라미터가 필요합니다.', example: '?action=debugIndicatorDetail&indicatorId=IND28' };
+
+  const ind = canonical.filter((c) => c.indicator_id === indicatorId)[0];
+  if (!ind) return { message: '해당 지표를 찾을 수 없습니다: ' + indicatorId };
+
+  const perUniversityRaw = UNIVERSITY_SHEET_NAMES.map((sheetName) => {
+    const rows = readUniversitySheetRows_(sheetName);
+    const targetKey = normalizeIndicatorName_(ind.indicator_name);
+    const row = rows.filter((r) => normalizeIndicatorName_(r.indicator_name) === targetKey)[0];
+    return {
+      sheet_name: sheetName,
+      display_name: SHEET_TO_DISPLAY_NAME[sheetName],
+      found_in_sheet: !!row,
+      raw_target: row ? row.target : null,
+      raw_actual: row ? row.actual : null,
+    };
+  });
+
+  const results = buildAllUniversityResults_().filter((r) => r.indicator_id === indicatorId);
+  const overviewTargets = getOverviewTargetMap_();
+
+  return {
+    indicator_id: ind.indicator_id,
+    indicator_name: ind.indicator_name,
+    normalized_name: normalizeIndicatorName_(ind.indicator_name),
+    overview_target: overviewTargets[normalizeIndicatorName_(ind.indicator_name)],
+    per_university_raw_from_own_tab: perUniversityRaw,
+    per_university_after_join: results,
+    allocated_sum: results.reduce((sum, r) => sum + (r.allocated_target || 0), 0),
+    actual_sum: results.reduce((sum, r) => sum + (r.actual_result || 0), 0),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 1. getDashboardData
 // ---------------------------------------------------------------------------
@@ -543,8 +587,9 @@ function findIndicatorRowNumber_(sheet, indicatorName) {
   const lastRow = sheet.getLastRow();
   if (lastRow < DATA_START_ROW) return null;
   const names = sheet.getRange(DATA_START_ROW, COL.NAME + 1, lastRow - DATA_START_ROW + 1, 1).getValues();
+  const targetKey = normalizeIndicatorName_(indicatorName);
   for (let i = 0; i < names.length; i++) {
-    if (String(names[i][0] || '').trim() === indicatorName) return DATA_START_ROW + i;
+    if (normalizeIndicatorName_(String(names[i][0] || '')) === targetKey) return DATA_START_ROW + i;
   }
   return null;
 }
@@ -872,6 +917,8 @@ function routeAction_(action, params) {
       return { success: true, data: debugNameMatch_() };
     case 'debugOverviewWide':
       return { success: true, data: debugOverviewWide_(params) };
+    case 'debugIndicatorDetail':
+      return { success: true, data: debugIndicatorDetail_(params) };
     default:
       return { success: false, message: '알 수 없는 요청입니다: ' + action };
   }
