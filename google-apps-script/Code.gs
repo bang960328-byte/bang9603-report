@@ -233,13 +233,14 @@ function normalizeIndicatorName_(name) {
     .trim();
 }
 
-function getOverviewTargetMap_() {
+/** 총괄 탭에서 실제로 읽은 원본 행을 그대로 반환한다 (디버그 겸용) */
+function readOverviewRawRows_() {
   const sheet = getSpreadsheet_().getSheetByName(OVERVIEW_SHEET_NAME);
-  if (!sheet) return {};
+  if (!sheet) return { rows: [], thirdYearCol: -1, lastRow: 0, lastCol: 0 };
 
   const lastRow = sheet.getLastRow();
   const lastCol = sheet.getLastColumn();
-  if (lastRow < 1 || lastCol < 1) return {};
+  if (lastRow < 1 || lastCol < 1) return { rows: [], thirdYearCol: -1, lastRow: lastRow, lastCol: lastCol };
 
   const headerRows = Math.min(lastRow, 5);
   const headerValues = sheet.getRange(1, 1, headerRows, lastCol).getValues();
@@ -253,28 +254,43 @@ function getOverviewTargetMap_() {
       }
     }
   }
-  if (thirdYearCol === -1) return {}; // "3차" 헤더를 못 찾으면 대학별 배부값 합계로 fallback
-  if (lastRow < OVERVIEW_DATA_START_ROW) return {};
+  if (thirdYearCol === -1 || lastRow < OVERVIEW_DATA_START_ROW) {
+    return { rows: [], thirdYearCol: thirdYearCol, lastRow: lastRow, lastCol: lastCol };
+  }
 
   const numCols = Math.max(thirdYearCol + 1, OVERVIEW_NAME_COL + 1);
   const numRows = lastRow - OVERVIEW_DATA_START_ROW + 1;
   const values = sheet.getRange(OVERVIEW_DATA_START_ROW, 1, numRows, numCols).getValues();
-  const map = {};
-  // 대학별 탭은 지표명에 중분류를 이미 포함해 쓰기도 한다(예: "전임 일반교원 수"/"비전임 일반교원 수").
-  // 총괄 탭은 중분류(B열, 병합 셀)와 지표명(C열)이 분리돼 있어 이름만으로는 두 "일반교원 수" 행이
-  // 구분되지 않으므로, 중분류를 forward-fill로 복원해 "중분류+지표명" 조합 키도 함께 등록한다.
+
   let lastSubcategory = '';
-  values.forEach((row) => {
+  const rows = [];
+  values.forEach((row, idx) => {
     const subRaw = String(row[OVERVIEW_SUBCATEGORY_COL] || '').trim();
     if (subRaw) lastSubcategory = subRaw;
     const name = String(row[OVERVIEW_NAME_COL] || '').trim();
     if (!name) return;
-    // null이면 "3차 목표 없음(-/공란)"을 의미 — 이 지표는 달성률을 계산하지 않는다.
-    const target = parseNumberCell_(row[thirdYearCol]);
-    const plainKey = normalizeIndicatorName_(name);
-    const combinedKey = normalizeIndicatorName_(lastSubcategory + name);
-    if (plainKey) map[plainKey] = target;
-    if (combinedKey) map[combinedKey] = target;
+    rows.push({
+      sheet_row: OVERVIEW_DATA_START_ROW + idx,
+      subcategory: lastSubcategory,
+      name: name,
+      raw_third_year_value: row[thirdYearCol],
+      target: parseNumberCell_(row[thirdYearCol]),
+    });
+  });
+
+  return { rows: rows, thirdYearCol: thirdYearCol, lastRow: lastRow, lastCol: lastCol };
+}
+
+function getOverviewTargetMap_() {
+  const map = {};
+  // 대학별 탭은 지표명에 중분류를 이미 포함해 쓰기도 한다(예: "전임 일반교원 수"/"비전임 일반교원 수").
+  // 총괄 탭은 중분류(B열, 병합 셀)와 지표명(C열)이 분리돼 있어 이름만으로는 두 "일반교원 수" 행이
+  // 구분되지 않으므로, 중분류를 forward-fill로 복원해 "중분류+지표명" 조합 키도 함께 등록한다.
+  readOverviewRawRows_().rows.forEach((r) => {
+    const plainKey = normalizeIndicatorName_(r.name);
+    const combinedKey = normalizeIndicatorName_(r.subcategory + r.name);
+    if (plainKey) map[plainKey] = r.target;
+    if (combinedKey) map[combinedKey] = r.target;
   });
   return map;
 }
@@ -367,6 +383,7 @@ function buildIndicatorSummaries_() {
 function debugNameMatch_() {
   const { canonical } = getIndicatorNameMap_();
   const overviewTargets = getOverviewTargetMap_();
+  const overviewRaw = readOverviewRawRows_();
   const results = buildAllUniversityResults_();
 
   const rows = canonical.map((ind) => {
@@ -388,6 +405,11 @@ function debugNameMatch_() {
   });
 
   return {
+    overview_last_row: overviewRaw.lastRow,
+    overview_last_col: overviewRaw.lastCol,
+    overview_third_year_col_0based: overviewRaw.thirdYearCol,
+    overview_row_count_read: overviewRaw.rows.length,
+    overview_raw_rows: overviewRaw.rows,
     overview_key_count: Object.keys(overviewTargets).length,
     unmatched_count: rows.filter((r) => !r.matched_overview).length,
     unmatched: rows.filter((r) => !r.matched_overview),
