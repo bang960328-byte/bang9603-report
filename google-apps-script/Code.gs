@@ -216,6 +216,17 @@ function writeEvidenceStatus_(payload) {
 const OVERVIEW_SHEET_NAME = '총괄';
 const OVERVIEW_NAME_COL = 2; // C열 = 지표명 (총괄 탭 공통 구조)
 
+// 총괄 탭의 지표명(예: "기존 교과목 개선건수(↓)")과 대학별 탭의 지표명(예: "기존 교과목 개선건수")은
+// 증감방향 표시(↓,↑ 등)·괄호·공백 유무가 서로 달라 그대로는 매칭되지 않는 경우가 많다.
+// 두 이름을 비교할 때는 이 함수로 정규화한 값을 키로 사용한다.
+function normalizeIndicatorName_(name) {
+  return String(name || '')
+    .replace(/[()（）［］\[\]]/g, '')
+    .replace(/[↑↓⇅↔→←]/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
 function getOverviewTargetMap_() {
   const sheet = getSpreadsheet_().getSheetByName(OVERVIEW_SHEET_NAME);
   if (!sheet) return {};
@@ -243,8 +254,10 @@ function getOverviewTargetMap_() {
   values.forEach((row) => {
     const name = String(row[OVERVIEW_NAME_COL] || '').trim();
     if (!name) return;
+    const key = normalizeIndicatorName_(name);
+    if (!key) return;
     // null이면 "3차 목표 없음(-/공란)"을 의미 — 이 지표는 달성률을 계산하지 않는다.
-    map[name] = parseNumberCell_(row[thirdYearCol]);
+    map[key] = parseNumberCell_(row[thirdYearCol]);
   });
   return map;
 }
@@ -300,7 +313,7 @@ function buildIndicatorSummaries_() {
 
     // 총괄 탭에 이 지표의 3차 목표가 있으면 그 값을 유일한 기준으로 쓰고,
     // 없으면(총괄에 없는 지표명) 대학별 배부값 합계로 대체한다.
-    const overviewTarget = overviewTargets[ind.indicator_name];
+    const overviewTarget = overviewTargets[normalizeIndicatorName_(ind.indicator_name)];
     const hasNoTarget = overviewTarget === null; // 총괄에 3차 목표가 '-'/공란으로 명시된 경우
     const totalTarget = overviewTarget === undefined ? allocatedSum : (overviewTarget === null ? null : overviewTarget);
 
