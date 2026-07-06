@@ -362,6 +362,39 @@ function buildIndicatorSummaries_() {
   });
 }
 
+// 총괄 탭 이름 매칭 진단용. 브라우저에서 배포 URL 뒤에 ?action=debugNameMatch 를 붙여 열면
+// 어떤 지표가 총괄 3차 값을 못 찾고 배부값 합계로 대체됐는지 바로 확인할 수 있다.
+function debugNameMatch_() {
+  const { canonical } = getIndicatorNameMap_();
+  const overviewTargets = getOverviewTargetMap_();
+  const results = buildAllUniversityResults_();
+
+  const rows = canonical.map((ind) => {
+    const key = normalizeIndicatorName_(ind.indicator_name);
+    const matched = Object.prototype.hasOwnProperty.call(overviewTargets, key);
+    const allocatedSum = results
+      .filter((r) => r.indicator_id === ind.indicator_id)
+      .reduce((sum, r) => sum + (r.allocated_target || 0), 0);
+    return {
+      indicator_id: ind.indicator_id,
+      indicator_name: ind.indicator_name,
+      category: ind.category,
+      subcategory: ind.subcategory,
+      normalized_name: key,
+      matched_overview: matched,
+      overview_target: matched ? overviewTargets[key] : null,
+      allocated_sum_fallback: allocatedSum,
+    };
+  });
+
+  return {
+    overview_key_count: Object.keys(overviewTargets).length,
+    unmatched_count: rows.filter((r) => !r.matched_overview).length,
+    unmatched: rows.filter((r) => !r.matched_overview),
+    all: rows,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 1. getDashboardData
 // ---------------------------------------------------------------------------
@@ -760,6 +793,8 @@ function routeAction_(action, params) {
       return { success: true, data: upsertUser_(params) };
     case 'getChangeLogs':
       return { success: true, data: getChangeLogs_() };
+    case 'debugNameMatch':
+      return { success: true, data: debugNameMatch_() };
     default:
       return { success: false, message: '알 수 없는 요청입니다: ' + action };
   }
