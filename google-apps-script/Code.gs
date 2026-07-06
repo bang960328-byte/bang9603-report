@@ -207,6 +207,48 @@ function writeEvidenceStatus_(payload) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 총괄 탭: 지표별 "3차년도 전체 목표값"의 유일한 기준.
+// 대학별 탭의 F열(배부값) 합계는 배분 참고용일 뿐, 실제 3차 목표는 총괄 탭에서 가져온다.
+// 헤더 열 위치를 하드코딩하지 않고 "3차"라는 헤더 텍스트를 찾아 그 열을 사용한다
+// (숨김 열 등으로 실제 위치가 달라져도 안전하게 동작하도록).
+// ---------------------------------------------------------------------------
+const OVERVIEW_SHEET_NAME = '총괄';
+const OVERVIEW_NAME_COL = 2; // C열 = 지표명 (총괄 탭 공통 구조)
+
+function getOverviewTargetMap_() {
+  const sheet = getSpreadsheet_().getSheetByName(OVERVIEW_SHEET_NAME);
+  if (!sheet) return {};
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 1 || lastCol < 1) return {};
+
+  const headerRows = Math.min(lastRow, 5);
+  const headerValues = sheet.getRange(1, 1, headerRows, lastCol).getValues();
+
+  let thirdYearCol = -1; // 0-based
+  for (let r = 0; r < headerValues.length && thirdYearCol === -1; r++) {
+    for (let c = 0; c < headerValues[r].length; c++) {
+      if (String(headerValues[r][c] || '').trim() === '3차') {
+        thirdYearCol = c;
+        break;
+      }
+    }
+  }
+  if (thirdYearCol === -1) return {}; // "3차" 헤더를 못 찾으면 대학별 배부값 합계로 fallback
+
+  const values = sheet.getRange(1, 1, lastRow, Math.max(thirdYearCol + 1, OVERVIEW_NAME_COL + 1)).getValues();
+  const map = {};
+  values.forEach((row) => {
+    const name = String(row[OVERVIEW_NAME_COL] || '').trim();
+    if (!name) return;
+    // null이면 "3차 목표 없음(-/공란)"을 의미 — 이 지표는 달성률을 계산하지 않는다.
+    map[name] = parseNumberCell_(row[thirdYearCol]);
+  });
+  return map;
+}
+
 /** 5개 대학 탭을 모두 읽어 지표별·대학별 실적 배열로 결합한다 */
 function buildAllUniversityResults_() {
   const { nameToId } = getIndicatorNameMap_();
@@ -248,14 +290,22 @@ function buildAllUniversityResults_() {
 function buildIndicatorSummaries_() {
   const { canonical } = getIndicatorNameMap_();
   const results = buildAllUniversityResults_();
+  const overviewTargets = getOverviewTargetMap_();
 
   return canonical.map((ind) => {
     const related = results.filter((r) => r.indicator_id === ind.indicator_id);
     const hasAnyActual = related.some((r) => r.actual_result !== null && r.actual_result !== undefined);
-    const totalTarget = related.reduce((sum, r) => sum + (r.allocated_target || 0), 0);
+    const allocatedSum = related.reduce((sum, r) => sum + (r.allocated_target || 0), 0);
     const totalActual = related.reduce((sum, r) => sum + (r.actual_result || 0), 0);
-    const rate = hasAnyActual ? calculateAchievementRate_(totalActual, totalTarget) : null;
-    const status = getAchievementStatus_(rate, hasAnyActual);
+
+    // 총괄 탭에 이 지표의 3차 목표가 있으면 그 값을 유일한 기준으로 쓰고,
+    // 없으면(총괄에 없는 지표명) 대학별 배부값 합계로 대체한다.
+    const overviewTarget = overviewTargets[ind.indicator_name];
+    const hasNoTarget = overviewTarget === null; // 총괄에 3차 목표가 '-'/공란으로 명시된 경우
+    const totalTarget = overviewTarget === undefined ? allocatedSum : (overviewTarget === null ? null : overviewTarget);
+
+    const rate = !hasNoTarget && hasAnyActual ? calculateAchievementRate_(totalActual, totalTarget || 0) : null;
+    const status = hasNoTarget ? '달성지표' : getAchievementStatus_(rate, hasAnyActual);
     const notes = related.map((r) => r.note).filter(Boolean);
     const submittedCount = related.filter((r) => r.evidence_status === '예').length;
     const evidenceStatus = related.length === 0 ? '해당없음' : submittedCount === related.length ? '예' : '아니오';
@@ -291,7 +341,7 @@ function getDashboardData_() {
   const categoryBreakdown = categories.map((category) => {
     const items = summaries.filter((s) => s.category === category);
     const catRates = items.map((s) => s.achievement_rate).filter((r) => r !== null);
-    return { category: category, count: items.length, averageRate: average_(catRates) };
+    return { category: category, count: items.length, averageRate: catRates.length > 0 ? average_(catRates) : null };
   });
 
   const universityNames = Array.from(new Set(results.map((r) => r.university_name)));
@@ -415,19 +465,7 @@ function updateUniversityResult_(payload) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. updateTarget — 실제 시트에는 "전체 목표값" 단일 셀이 없고, 대학별 배부 목표값의
-//    합계가 곧 전체 목표값이므로 전체 목표값 직접 수정은 지원하지 않는다.
-//    (대학별 배부 목표값 수정은 updateUniversityResult_의 allocated_target으로 처리)
-// ---------------------------------------------------------------------------
-function updateTarget_() {
-  return {
-    success: false,
-    message: '전체 목표값은 대학별 배부 목표값의 합계로 자동 계산됩니다. 대학별 배부·달성 관리 화면에서 배부 목표값을 수정해 주세요.',
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 6. getPriorityIndicators — 지표별(5개 대학 합산)로 집계
+// 5. getPriorityIndicators — 지표별(5개 대학 합산)로 집계
 // ---------------------------------------------------------------------------
 function getPriorityIndicators_() {
   const summaries = buildIndicatorSummaries_();
@@ -435,6 +473,8 @@ function getPriorityIndicators_() {
   const priorities = [];
 
   summaries.forEach((summary) => {
+    if (summary.status === '달성지표') return; // 3차 목표가 없는 지표는 우선 관리 대상에서 제외
+
     const hasActual = summary.universityResults.some(
       (r) => r.actual_result !== null && r.actual_result !== undefined
     );
@@ -675,8 +715,6 @@ function routeAction_(action, params) {
       return { success: true, data: getUniversityResults_(params) };
     case 'updateUniversityResult':
       return { success: true, data: updateUniversityResult_(params) };
-    case 'updateTarget':
-      return { success: true, data: updateTarget_(params) };
     case 'getPriorityIndicators':
       return { success: true, data: getPriorityIndicators_(params) };
     case 'updatePriorityAction':

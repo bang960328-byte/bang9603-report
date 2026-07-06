@@ -9,13 +9,13 @@ import { CategoryBadge, EvidenceBadge, StatusBadge } from '@/components/common/S
 import { getIndicators } from '@/services/api';
 import type { AchievementStatus, EvidenceStatus, IndicatorSummary } from '@/types';
 import { UNIVERSITIES } from '@/types';
-import { formatNumber, formatRate } from '@/utils/format';
+import { formatNumber, formatRate, formatRateOrAchieved } from '@/utils/format';
 import { useAutoRefresh } from '@/utils/useAutoRefresh';
 
 type SortKey = 'indicator_id' | 'achievement_rate' | 'updated_at';
 type SortDir = 'asc' | 'desc';
 
-const STATUS_OPTIONS: (AchievementStatus | '전체')[] = ['전체', '정상', '주의', '미달', '미제출'];
+const STATUS_OPTIONS: (AchievementStatus | '전체')[] = ['전체', '정상', '주의', '미달', '미제출', '달성지표'];
 const EVIDENCE_OPTIONS: (EvidenceStatus | '전체')[] = ['전체', '예', '아니오', '해당없음'];
 
 export function IndicatorsOverviewPage() {
@@ -81,15 +81,17 @@ export function IndicatorsOverviewPage() {
         total_target: uniResult?.allocated_target ?? 0,
         total_actual: uniResult?.actual_result ?? null,
         achievement_rate: uniResult?.achievement_rate ?? null,
-        status: (uniResult
-          ? uniResult.actual_result === null || uniResult.actual_result === undefined
-            ? '미제출'
-            : (uniResult.achievement_rate ?? 0) >= 100
-              ? '정상'
-              : (uniResult.achievement_rate ?? 0) >= 80
-                ? '주의'
-                : '미달'
-          : '미제출') as AchievementStatus,
+        status: (r.status === '달성지표'
+          ? '달성지표'
+          : uniResult
+            ? uniResult.actual_result === null || uniResult.actual_result === undefined
+              ? '미제출'
+              : (uniResult.achievement_rate ?? 0) >= 100
+                ? '정상'
+                : (uniResult.achievement_rate ?? 0) >= 80
+                  ? '주의'
+                  : '미달'
+            : '미제출') as AchievementStatus,
         evidence_status: uniResult?.evidence_status ?? '해당없음',
         note: uniResult?.note ?? '',
         updated_at: uniResult?.updated_at ?? r.updated_at,
@@ -134,7 +136,7 @@ export function IndicatorsOverviewPage() {
   ];
   const csvRows = filtered.map((r) => [
     r.indicator_id, r.year, r.category, r.indicator_name, r.unit,
-    r.total_target, r.total_actual ?? '', formatRate(r.achievement_rate), r.status, r.evidence_status, r.note, r.updated_at,
+    r.total_target ?? '-', r.total_actual ?? '', formatRate(r.achievement_rate), r.status, r.evidence_status, r.note, r.updated_at,
   ]);
 
   return (
@@ -209,7 +211,9 @@ export function IndicatorsOverviewPage() {
                   <td className="whitespace-nowrap px-3 py-2 text-gray-500">{r.unit}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">{formatNumber(r.total_target)}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">{formatNumber(r.total_actual)}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-gray-800">{formatRate(r.achievement_rate)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-gray-800">
+                    {formatRateOrAchieved(r.achievement_rate, r.total_target, r.total_actual)}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2"><StatusBadge status={r.status} /></td>
                   <td className="whitespace-nowrap px-3 py-2"><EvidenceBadge status={r.evidence_status} /></td>
                   <td className="max-w-[160px] truncate px-3 py-2 text-gray-500" title={r.note}>{r.note || '-'}</td>

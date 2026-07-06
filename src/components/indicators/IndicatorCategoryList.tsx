@@ -5,7 +5,7 @@ import { ProgressBar } from '@/components/common/ProgressBar';
 import { EvidenceBadge, StatusBadge } from '@/components/common/StatusBadge';
 import { getIndicators } from '@/services/api';
 import type { IndicatorCategory, IndicatorSummary } from '@/types';
-import { formatNumber, formatRate } from '@/utils/format';
+import { formatNumber, formatRateOrAchieved } from '@/utils/format';
 import { useAutoRefresh } from '@/utils/useAutoRefresh';
 
 export function IndicatorCategoryList({ category }: { category: IndicatorCategory }) {
@@ -52,14 +52,21 @@ export function IndicatorCategoryList({ category }: { category: IndicatorCategor
                   {item.status === '정상' && (
                     <span className="text-xs font-medium text-emerald-600">목표 달성 완료</span>
                   )}
+                  {item.status === '달성지표' && (
+                    <span className="text-xs font-medium text-blue-600">3차년도 목표값 없음</span>
+                  )}
                 </div>
                 <p className="mt-1 text-xs text-gray-500">{item.description}</p>
               </div>
               <div className="w-48 shrink-0">
-                <ProgressBar rate={item.achievement_rate} />
+                {item.status === '달성지표' ? (
+                  <p className="text-right text-xs text-gray-400">달성률 계산 대상 아님</p>
+                ) : (
+                  <ProgressBar rate={item.achievement_rate} />
+                )}
               </div>
               <div className="w-32 shrink-0 text-right text-xs text-gray-500">
-                {formatNumber(item.total_actual)} / {formatNumber(item.total_target)} {item.unit}
+                {formatNumber(item.total_actual)} / {item.total_target === null ? '-' : formatNumber(item.total_target)} {item.unit}
               </div>
               {isOpen ? <ChevronUp className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />}
             </button>
@@ -72,7 +79,7 @@ export function IndicatorCategoryList({ category }: { category: IndicatorCategor
                     <thead>
                       <tr className="text-left text-xs font-medium text-gray-500">
                         <th className="whitespace-nowrap px-3 py-2">대학명</th>
-                        <th className="whitespace-nowrap px-3 py-2 text-right">배부 목표값</th>
+                        <th className="whitespace-nowrap px-3 py-2 text-right">배부값</th>
                         <th className="whitespace-nowrap px-3 py-2 text-right">실적값</th>
                         <th className="whitespace-nowrap px-3 py-2 text-right">달성률</th>
                         <th className="whitespace-nowrap px-3 py-2">증빙</th>
@@ -83,8 +90,14 @@ export function IndicatorCategoryList({ category }: { category: IndicatorCategor
                         <tr key={ur.result_id}>
                           <td className="whitespace-nowrap px-3 py-2 font-medium text-gray-700">{ur.university_name}</td>
                           <td className="whitespace-nowrap px-3 py-2 text-right text-gray-600">{formatNumber(ur.allocated_target)}</td>
-                          <td className="whitespace-nowrap px-3 py-2 text-right text-gray-600">{formatNumber(ur.actual_result)}</td>
-                          <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-gray-700">{formatRate(ur.achievement_rate)}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-right">
+                            <span className={ur.actual_result !== null ? 'font-semibold text-emerald-600' : 'text-gray-300'}>
+                              {ur.actual_result !== null ? formatNumber(ur.actual_result) : '미입력'}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-gray-700">
+                            {formatRateOrAchieved(ur.achievement_rate, ur.allocated_target, ur.actual_result)}
+                          </td>
                           <td className="whitespace-nowrap px-3 py-2"><EvidenceBadge status={ur.evidence_status} /></td>
                         </tr>
                       ))}

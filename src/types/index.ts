@@ -4,8 +4,8 @@ export type IndicatorCategory = string;
 // 지표 사용 여부
 export type IndicatorStatus = '사용' | '미사용';
 
-// 달성 상태
-export type AchievementStatus = '정상' | '주의' | '미달' | '미제출';
+// 달성 상태 ('달성지표'는 3차년도 목표값 자체가 없어 달성률을 계산하지 않는 지표)
+export type AchievementStatus = '정상' | '주의' | '미달' | '미제출' | '달성지표';
 
 // 증빙 제출 여부 (예/아니오)
 export type EvidenceStatus = '예' | '아니오' | '해당없음';
@@ -45,7 +45,7 @@ export interface Target {
   target_id: string;
   year: number;
   indicator_id: string;
-  total_target: number;
+  total_target: number | null; // null이면 3차년도 목표값이 없는(달성지표) 경우
   note: string;
   updated_at: string;
 }
@@ -109,7 +109,7 @@ export interface IndicatorSummary {
   indicator_name: string;
   unit: string;
   description: string;
-  total_target: number;
+  total_target: number | null;
   total_actual: number;
   achievement_rate: number | null;
   status: AchievementStatus;
@@ -126,7 +126,7 @@ export interface DashboardData {
   averageAchievementRate: number;
   underAchievedCount: number;
   evidenceMissingCount: number;
-  categoryBreakdown: { category: string; count: number; averageRate: number }[];
+  categoryBreakdown: { category: string; count: number; averageRate: number | null }[];
   universityRates: { university_name: string; rate: number }[];
   indicatorRanking: { indicator_name: string; rate: number; category: IndicatorCategory }[];
   evidenceStatusCounts: { status: EvidenceStatus; count: number }[];

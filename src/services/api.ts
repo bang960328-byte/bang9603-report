@@ -250,54 +250,6 @@ export async function updateUniversityResult(
 }
 
 // ---------------------------------------------------------------------------
-// 6. updateTarget (관리자 전용)
-// ---------------------------------------------------------------------------
-export interface UpdateTargetPayload {
-  indicator_id: string;
-  total_target: number;
-  note?: string;
-  updated_by: string;
-  user_name: string;
-}
-
-export async function updateTarget(
-  payload: UpdateTargetPayload
-): Promise<{ success: boolean; message?: string }> {
-  const check = validateNumberInput(payload.total_target);
-  if (!check.valid) return { success: false, message: check.message };
-
-  try {
-    const data = await callGasPost<{ success: boolean; message?: string }>('updateTarget', payload);
-    markLive();
-    return data;
-  } catch (err) {
-    markFallback(err);
-    const target = localStore.targets.find((t) => t.indicator_id === payload.indicator_id);
-    if (!target) return { success: false, message: '대상 목표값을 찾을 수 없습니다.' };
-
-    const timestamp = nowTimestamp();
-    appendLog({
-      timestamp,
-      user_id: payload.updated_by,
-      user_name: payload.user_name,
-      university_name: '전체',
-      action: 'update',
-      sheet_name: 'targets',
-      row_id: target.target_id,
-      field_name: 'total_target',
-      old_value: String(target.total_target),
-      new_value: String(payload.total_target),
-    });
-
-    target.total_target = payload.total_target;
-    if (payload.note !== undefined) target.note = payload.note;
-    target.updated_at = timestamp;
-
-    return { success: true };
-  }
-}
-
-// ---------------------------------------------------------------------------
 // 7. getPriorityIndicators
 // ---------------------------------------------------------------------------
 export async function getPriorityIndicators(user: AuthUser, year = 2026): Promise<PriorityIndicator[]> {

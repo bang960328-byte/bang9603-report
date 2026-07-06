@@ -8,7 +8,7 @@ import { useToast } from '@/context/ToastContext';
 import { getIndicators, getUniversityResults, updateUniversityResult } from '@/services/api';
 import type { EvidenceStatus, IndicatorSummary, UniversityResult } from '@/types';
 import { UNIVERSITIES } from '@/types';
-import { formatNumber, formatRate } from '@/utils/format';
+import { formatNumber, formatRateOrAchieved } from '@/utils/format';
 
 interface EditableRow {
   evidence_status: EvidenceStatus;
@@ -169,7 +169,7 @@ export function UniversityManagementPage() {
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-gray-700">
-                      {formatRate(r.achievement_rate)}
+                      {formatRateOrAchieved(r.achievement_rate, r.allocated_target, r.actual_result)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2">
                       <select

@@ -8,6 +8,21 @@ export function formatRate(rate: number | null | undefined): string {
   return `${rate.toFixed(1)}%`;
 }
 
+/**
+ * 배부값(목표)이 0/미배정인데 실적만 입력된 경우, 계산 불가능한 N/A 대신
+ * "달성"으로 표시한다 (배부 없이도 실적을 냈다는 의미).
+ */
+export function formatRateOrAchieved(
+  rate: number | null | undefined,
+  target: number | null | undefined,
+  actual: number | null | undefined
+): string {
+  const hasActual = actual !== null && actual !== undefined;
+  const hasNoTarget = target === null || target === undefined || target <= 0;
+  if (hasNoTarget && hasActual) return '달성';
+  return formatRate(rate);
+}
+
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '-';
   return dateStr;

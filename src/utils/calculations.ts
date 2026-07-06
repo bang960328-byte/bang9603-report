@@ -33,6 +33,7 @@ export const STATUS_COLOR_MAP: Record<AchievementStatus, string> = {
   주의: 'bg-amber-50 text-amber-700 border-amber-200',
   미달: 'bg-rose-50 text-rose-700 border-rose-200',
   미제출: 'bg-gray-100 text-gray-500 border-gray-200',
+  달성지표: 'bg-blue-50 text-blue-700 border-blue-200',
 };
 
 export const EVIDENCE_COLOR_MAP: Record<string, string> = {

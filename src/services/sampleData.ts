@@ -23,7 +23,7 @@ interface IndicatorConfig {
   name: string;
   unit: string;
   description: string;
-  totalTarget: number;
+  totalTarget: number | null; // null이면 3차년도 목표값이 없는 지표(달성지표로 표시)
   isRateType?: boolean;
   factor: number; // 전체 목표 대비 실적 달성 비율(기본값)
   noResult?: boolean;
@@ -74,6 +74,8 @@ const CONFIGS: IndicatorConfig[] = [
   { id: 'IND27', category: '공유교과목 이수지수', name: '컨소 내 대학 간 연계 교과목 이수자 수', unit: '명', description: '컨소시엄 내 대학 간 연계 교과목 이수자 수', totalTarget: 923, factor: 0.85 },
   { id: 'IND28', category: '공유교과목 이수지수', name: '컨소 간 대학 간 연계 교과목 이수자 수', unit: '명', description: '컨소시엄 간 대학 연계 교과목 이수자 수', totalTarget: 30, factor: 1.2 },
   { id: 'IND29', category: '공유교과목 이수지수', name: '공동활용대학 간 연계 교과목 이수자 수', unit: '명', description: '공동활용대학 간 연계 교과목 이수자 수', totalTarget: 40, factor: 0.75, nullActualUniversities: ['영남이공대학교'] },
+  // 3차년도 목표값이 없는 지표(총괄 탭 3차 목표가 '-') — 실적만 참고용으로 추적하며 달성률은 계산하지 않는다.
+  { id: 'IND30', category: '진로성과지수', name: '지역 취업률', unit: '%', description: '수도권 및 권역대상 지역 취업률', totalTarget: null, isRateType: true, factor: 1 },
 ];
 
 // 강원대학교가 주관대학이므로 배부 비중과 평균 실적 수준이 상대적으로 높게 설정됨
@@ -136,13 +138,19 @@ function buildUniversityResults(): UniversityResult[] {
       const weight = UNIVERSITY_WEIGHT[uni];
       const adjust = UNIVERSITY_PERFORMANCE_ADJUST[uni];
 
-      const allocatedTarget = c.isRateType
-        ? c.totalTarget
-        : Math.round(c.totalTarget * weight);
+      const allocatedTarget =
+        c.totalTarget === null
+          ? 0 // 3차년도 목표값이 없는 지표는 대학별 배부값도 없음(0)
+          : c.isRateType
+            ? c.totalTarget
+            : Math.round(c.totalTarget * weight);
 
       let actual: number | null;
       if (c.noResult || c.nullActualUniversities?.includes(uni)) {
         actual = null;
+      } else if (c.totalTarget === null) {
+        // 목표 없이 참고용으로만 추적하는 실적치(예: 지역 취업률)
+        actual = Math.round(60 * adjust * 10) / 10;
       } else if (c.isRateType) {
         actual = Math.round(allocatedTarget * c.factor * adjust * 10) / 10;
       } else {
