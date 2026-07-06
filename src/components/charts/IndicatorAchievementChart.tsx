@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 interface RankingDatum {
@@ -32,7 +32,7 @@ const CORE_CATEGORY_ORDER = [
 // 자율지표 — 대학혁신부터가 자율지표, 그 앞은 전부 핵심지표
 const AUTONOMOUS_CATEGORY_ORDER = ['대학혁신', '지역혁신', '산업혁신', '글로벌혁신'];
 
-const ACHIEVED_COLOR = '#059669'; // 100% 이상
+const ACHIEVED_COLOR = '#2a78d6'; // 100% 이상
 const UNDER_COLOR = '#e11d48'; // 100% 미만
 
 function normalizeCategoryKey(category: string): string {
@@ -124,6 +124,18 @@ function CategoryBarGroup({
 
 export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setExpanded(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [expanded]);
 
   const { coreCategories, autonomousCategories } = useMemo(() => {
     const grouped = new Map<string, number[]>();
@@ -157,7 +169,7 @@ export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
   const toggle = (category: string) => setExpanded((prev) => (prev === category ? null : category));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" ref={containerRef}>
       <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400">
         <span>막대를 클릭하면 지수 내 세부 지표가 아래에 펼쳐집니다.</span>
         <span className="inline-flex items-center gap-1.5">
