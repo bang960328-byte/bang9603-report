@@ -260,7 +260,8 @@ function readOverviewRawRows_() {
     return { rows: [], thirdYearCol: thirdYearCol, lastRow: lastRow, lastCol: lastCol };
   }
 
-  const numCols = Math.max(thirdYearCol + 1, OVERVIEW_NAME_COL + 1);
+  const thirdYearActualCol = thirdYearCol + 1; // "3차" 목표값 바로 다음 열이 "3차 실적"
+  const numCols = Math.max(thirdYearActualCol + 1, OVERVIEW_NAME_COL + 1);
   const numRows = lastRow - OVERVIEW_DATA_START_ROW + 1;
   const values = sheet.getRange(OVERVIEW_DATA_START_ROW, 1, numRows, numCols).getValues();
 
@@ -290,6 +291,8 @@ function readOverviewRawRows_() {
       name: name,
       raw_third_year_value: row[thirdYearCol],
       target: parseNumberCell_(row[thirdYearCol]),
+      raw_third_year_actual_value: row[thirdYearActualCol],
+      actual: parseNumberCell_(row[thirdYearActualCol]),
     });
   });
 
@@ -306,6 +309,19 @@ function getOverviewTargetMap_() {
     const combinedKey = normalizeIndicatorName_(r.subcategory + r.name);
     if (plainKey) map[plainKey] = r.target;
     if (combinedKey) map[combinedKey] = r.target;
+  });
+  return map;
+}
+
+// 만족도류(RATE_AVERAGE_CATEGORY_KEYS) 지표는 대학별 탭을 집계하는 대신 총괄 탭 "3차 실적"
+// 값을 그대로 실적으로 쓴다 — 담당자가 총괄 탭에 직접 입력·관리하는 값이 기준이 된다.
+function getOverviewActualMap_() {
+  const map = {};
+  readOverviewRawRows_().rows.forEach((r) => {
+    const plainKey = normalizeIndicatorName_(r.name);
+    const combinedKey = normalizeIndicatorName_(r.subcategory + r.name);
+    if (plainKey) map[plainKey] = r.actual;
+    if (combinedKey) map[combinedKey] = r.actual;
   });
   return map;
 }
@@ -348,16 +364,37 @@ function buildAllUniversityResults_() {
   return results;
 }
 
+// 만족도류 지표는 %(비율) 값이라 대학별 실적을 합산하면 안 되고 평균을 내야 한다
+// (예: 학생 만족도 90%, 90.4% → 합계 180.4%가 아니라 평균 90.2%가 실적).
+const RATE_AVERAGE_CATEGORY_KEYS = ['교육만족도'];
+
+function isRateAverageCategory_(category) {
+  return RATE_AVERAGE_CATEGORY_KEYS.indexOf(String(category || '').replace(/\s+/g, '')) !== -1;
+}
+
 function buildIndicatorSummaries_() {
   const { canonical } = getIndicatorNameMap_();
   const results = buildAllUniversityResults_();
   const overviewTargets = getOverviewTargetMap_();
+  const overviewActuals = getOverviewActualMap_();
 
   return canonical.map((ind) => {
     const related = results.filter((r) => r.indicator_id === ind.indicator_id);
     const hasAnyActual = related.some((r) => r.actual_result !== null && r.actual_result !== undefined);
     const allocatedSum = related.reduce((sum, r) => sum + (r.allocated_target || 0), 0);
-    const totalActual = related.reduce((sum, r) => sum + (r.actual_result || 0), 0);
+    // 만족도류 지표는 대학별 탭을 집계하지 않고 총괄 탭 "3차 실적" 값을 그대로 쓴다
+    // (담당자가 총괄 탭에서 직접 관리하는 값이 기준). 총괄에 값이 없으면 대학별 탭에서
+    // 실제로 입력된(0이 아닌) 값만 골라 평균을 낸다.
+    const overviewActual = overviewActuals[normalizeIndicatorName_(ind.indicator_name)];
+    const totalActual = isRateAverageCategory_(ind.category)
+      ? overviewActual !== undefined && overviewActual !== null
+        ? overviewActual
+        : average_(
+            related
+              .filter((r) => r.actual_result !== null && r.actual_result !== undefined && r.actual_result !== 0)
+              .map((r) => r.actual_result)
+          )
+      : related.reduce((sum, r) => sum + (r.actual_result || 0), 0);
 
     // 총괄 탭에 이 지표의 3차 목표가 있으면 그 값을 유일한 기준으로 쓰고,
     // 없으면(총괄에 없는 지표명) 대학별 배부값 합계로 대체한다.
@@ -501,12 +538,16 @@ function debugIndicatorDetail_(params) {
 
   const results = buildAllUniversityResults_().filter((r) => r.indicator_id === indicatorId);
   const overviewTargets = getOverviewTargetMap_();
+  const overviewActuals = getOverviewActualMap_();
 
   return {
     indicator_id: ind.indicator_id,
     indicator_name: ind.indicator_name,
+    category: ind.category,
     normalized_name: normalizeIndicatorName_(ind.indicator_name),
+    is_rate_average_category: isRateAverageCategory_(ind.category),
     overview_target: overviewTargets[normalizeIndicatorName_(ind.indicator_name)],
+    overview_actual: overviewActuals[normalizeIndicatorName_(ind.indicator_name)],
     per_university_raw_from_own_tab: perUniversityRaw,
     per_university_after_join: results,
     allocated_sum: results.reduce((sum, r) => sum + (r.allocated_target || 0), 0),
