@@ -144,6 +144,7 @@ function getCanonicalIndicators_() {
     indicator_id: 'IND' + String(idx + 1).padStart(2, '0'),
     indicator_name: r.indicator_name,
     category: r.category,
+    subcategory: r.subcategory,
   }));
 }
 
@@ -214,7 +215,9 @@ function writeEvidenceStatus_(payload) {
 // (숨김 열 등으로 실제 위치가 달라져도 안전하게 동작하도록).
 // ---------------------------------------------------------------------------
 const OVERVIEW_SHEET_NAME = '총괄';
+const OVERVIEW_SUBCATEGORY_COL = 1; // B열 = 지표 중분류 (병합 셀 — forward-fill로 복원)
 const OVERVIEW_NAME_COL = 2; // C열 = 지표명 (총괄 탭 공통 구조)
+const OVERVIEW_DATA_START_ROW = 3; // 1-indexed, 총괄 탭 데이터 시작 행
 
 // 총괄 탭의 지표명(예: "기존 교과목 개선건수(↓)")과 대학별 탭의 지표명(예: "기존 교과목 개선건수")은
 // 증감방향 표시(↓,↑ 등)·괄호·공백 유무가 서로 달라 그대로는 매칭되지 않는 경우가 많다.
@@ -248,16 +251,27 @@ function getOverviewTargetMap_() {
     }
   }
   if (thirdYearCol === -1) return {}; // "3차" 헤더를 못 찾으면 대학별 배부값 합계로 fallback
+  if (lastRow < OVERVIEW_DATA_START_ROW) return {};
 
-  const values = sheet.getRange(1, 1, lastRow, Math.max(thirdYearCol + 1, OVERVIEW_NAME_COL + 1)).getValues();
+  const numCols = Math.max(thirdYearCol + 1, OVERVIEW_NAME_COL + 1);
+  const numRows = lastRow - OVERVIEW_DATA_START_ROW + 1;
+  const values = sheet.getRange(OVERVIEW_DATA_START_ROW, 1, numRows, numCols).getValues();
   const map = {};
+  // 대학별 탭은 지표명에 중분류를 이미 포함해 쓰기도 한다(예: "전임 일반교원 수"/"비전임 일반교원 수").
+  // 총괄 탭은 중분류(B열, 병합 셀)와 지표명(C열)이 분리돼 있어 이름만으로는 두 "일반교원 수" 행이
+  // 구분되지 않으므로, 중분류를 forward-fill로 복원해 "중분류+지표명" 조합 키도 함께 등록한다.
+  let lastSubcategory = '';
   values.forEach((row) => {
+    const subRaw = String(row[OVERVIEW_SUBCATEGORY_COL] || '').trim();
+    if (subRaw) lastSubcategory = subRaw;
     const name = String(row[OVERVIEW_NAME_COL] || '').trim();
     if (!name) return;
-    const key = normalizeIndicatorName_(name);
-    if (!key) return;
     // null이면 "3차 목표 없음(-/공란)"을 의미 — 이 지표는 달성률을 계산하지 않는다.
-    map[key] = parseNumberCell_(row[thirdYearCol]);
+    const target = parseNumberCell_(row[thirdYearCol]);
+    const plainKey = normalizeIndicatorName_(name);
+    const combinedKey = normalizeIndicatorName_(lastSubcategory + name);
+    if (plainKey) map[plainKey] = target;
+    if (combinedKey) map[combinedKey] = target;
   });
   return map;
 }
@@ -313,6 +327,9 @@ function buildIndicatorSummaries_() {
 
     // 총괄 탭에 이 지표의 3차 목표가 있으면 그 값을 유일한 기준으로 쓰고,
     // 없으면(총괄에 없는 지표명) 대학별 배부값 합계로 대체한다.
+    // 대학별 탭의 지표명은 "전임 일반교원 수"처럼 중분류를 이미 포함하기도 하는데, 이 경우
+    // 정규화한 지표명 자체가 총괄 탭에서 만든 "중분류+지표명" 조합 키와 그대로 일치하므로
+    // 별도로 다시 조합하지 않고 지표명 하나만 정규화해 조회한다.
     const overviewTarget = overviewTargets[normalizeIndicatorName_(ind.indicator_name)];
     const hasNoTarget = overviewTarget === null; // 총괄에 3차 목표가 '-'/공란으로 명시된 경우
     const totalTarget = overviewTarget === undefined ? allocatedSum : (overviewTarget === null ? null : overviewTarget);
