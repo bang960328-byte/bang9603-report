@@ -2,12 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { ListChecks, Layers, Gauge, AlertTriangle, FileWarning } from 'lucide-react';
 import { StatCard } from '@/components/common/StatCard';
 import { Card } from '@/components/common/Card';
-import { ProgressBar } from '@/components/common/ProgressBar';
 import { RiskBadge } from '@/components/common/StatusBadge';
 import { UniversityComparisonChart } from '@/components/charts/UniversityComparisonChart';
 import { IndicatorRankingChart } from '@/components/charts/IndicatorRankingChart';
 import { EvidenceStatusChart } from '@/components/charts/EvidenceStatusChart';
-import { CategoryBreakdownChart } from '@/components/charts/CategoryBreakdownChart';
 import { getDashboardData, getPriorityIndicators } from '@/services/api';
 import type { DashboardData, PriorityIndicator } from '@/types';
 import { formatNumber, formatRate } from '@/utils/format';
@@ -48,24 +46,13 @@ export function DashboardPage() {
         <StatCard label="증빙 미제출(대학별)" value={formatNumber(data.evidenceMissingCount)} unit="건" icon={FileWarning} tone="warning" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card title="전체 평균 달성률" className="lg:col-span-1">
-          <ProgressBar rate={data.averageAchievementRate} size="md" />
-          <p className="mt-3 text-xs text-gray-500">전체 {data.totalIndicators}개 지표 기준 종합 달성 현황</p>
-        </Card>
-        <Card title="대분류별 평균 달성률" description="지표 대분류 기준" className="lg:col-span-2">
-          <CategoryBreakdownChart data={data.categoryBreakdown} />
-        </Card>
-      </div>
+      <Card title="대학별 달성률 비교" description="참여대학 평균 달성률(%)">
+        <UniversityComparisonChart data={data.universityRates} />
+      </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card title="대학별 달성률 비교" description="참여대학 평균 달성률(%)">
-          <UniversityComparisonChart data={data.universityRates} />
-        </Card>
-        <Card title="지표별 달성률 순위" description="상위 8개 지표 기준">
-          <IndicatorRankingChart data={data.indicatorRanking} />
-        </Card>
-      </div>
+      <Card title="핵심지표 달성현황" description="전체 지표 달성률 기준">
+        <IndicatorRankingChart data={data.indicatorRanking} />
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card title="증빙 제출 현황" className="lg:col-span-1">
