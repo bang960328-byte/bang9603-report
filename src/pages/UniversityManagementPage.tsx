@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Save, Pencil } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pencil } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card } from '@/components/common/Card';
 import { CategoryBadge } from '@/components/common/StatusBadge';
@@ -10,24 +10,21 @@ import type { EvidenceStatus, IndicatorSummary, UniversityResult } from '@/types
 import { UNIVERSITIES } from '@/types';
 import { formatNumber, formatRateOrAchieved } from '@/utils/format';
 
-interface EditableRow {
-  evidence_status: EvidenceStatus;
-  note: string;
-  noteOpen: boolean;
-  dirty: boolean;
-}
+const NOTE_SAVE_DEBOUNCE_MS = 700;
 
 export function UniversityManagementPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [results, setResults] = useState<UniversityResult[]>([]);
   const [indicators, setIndicators] = useState<IndicatorSummary[]>([]);
-  const [editState, setEditState] = useState<Record<string, EditableRow>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const [activeUniversity, setActiveUniversity] = useState(
     user?.role === 'university' ? user.university_name : UNIVERSITIES[0]
   );
   const [isLoading, setIsLoading] = useState(true);
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const noteTimerRef = useRef<number | null>(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -37,16 +34,11 @@ export function UniversityManagementPage() {
       const [res, ind] = await Promise.all([getUniversityResults(user), getIndicators()]);
       setResults(res);
       setIndicators(ind);
-      const initial: Record<string, EditableRow> = {};
+      const drafts: Record<string, string> = {};
       res.forEach((r) => {
-        initial[r.result_id] = {
-          evidence_status: r.evidence_status === '예' || r.evidence_status === '아니오' ? r.evidence_status : '아니오',
-          note: r.note,
-          noteOpen: !!r.note,
-          dirty: false,
-        };
+        drafts[r.result_id] = r.note;
       });
-      setEditState(initial);
+      setNoteDrafts(drafts);
       setIsLoading(false);
     })();
   }, [user]);
@@ -62,43 +54,66 @@ export function UniversityManagementPage() {
     [results, activeUniversity]
   );
 
-  const updateField = (resultId: string, field: keyof EditableRow, value: string | boolean) => {
-    setEditState((prev) => ({
-      ...prev,
-      [resultId]: { ...prev[resultId], [field]: value, dirty: true },
-    }));
+  const saveUpdate = useCallback(
+    async (row: UniversityResult, patch: { evidence_status?: EvidenceStatus; note?: string }, silent = false) => {
+      if (!user) return;
+      const res = await updateUniversityResult({
+        result_id: row.result_id,
+        updated_by: user.user_id,
+        user_name: user.name,
+        university_name: row.university_name,
+        role: user.role,
+        ...patch,
+      });
+      if (res.success) {
+        setResults((prev) => prev.map((r) => (r.result_id === row.result_id ? { ...r, ...patch } : r)));
+        if (!silent) showToast('success', `${row.university_name} 저장되었습니다.`);
+      } else {
+        showToast('error', res.message ?? '저장에 실패했습니다.');
+      }
+    },
+    [user, showToast]
+  );
+
+  const handleEvidenceChange = (row: UniversityResult, value: EvidenceStatus) => {
+    saveUpdate(row, { evidence_status: value });
   };
 
-  const handleSave = async (row: UniversityResult) => {
-    if (!user) return;
-    const edit = editState[row.result_id];
-    if (!edit) return;
+  const scheduleNoteSave = (row: UniversityResult, value: string) => {
+    if (noteTimerRef.current) window.clearTimeout(noteTimerRef.current);
+    noteTimerRef.current = window.setTimeout(() => {
+      saveUpdate(row, { note: value }, true);
+    }, NOTE_SAVE_DEBOUNCE_MS);
+  };
 
-    setSavingId(row.result_id);
-    const res = await updateUniversityResult({
-      result_id: row.result_id,
-      evidence_status: edit.evidence_status,
-      note: edit.note,
-      updated_by: user.user_id,
-      user_name: user.name,
-      university_name: row.university_name,
-    });
-    setSavingId(null);
-
-    if (res.success) {
-      showToast('success', `${row.university_name} 증빙·비고가 저장되었습니다.`);
-      setResults((prev) =>
-        prev.map((r) =>
-          r.result_id === row.result_id
-            ? { ...r, evidence_status: edit.evidence_status, note: edit.note }
-            : r
-        )
-      );
-      setEditState((prev) => ({ ...prev, [row.result_id]: { ...edit, dirty: false } }));
-    } else {
-      showToast('error', res.message ?? '저장에 실패했습니다.');
+  const flushNoteSave = (row: UniversityResult) => {
+    if (noteTimerRef.current) {
+      window.clearTimeout(noteTimerRef.current);
+      noteTimerRef.current = null;
+    }
+    const draft = noteDrafts[row.result_id] ?? '';
+    if (draft !== row.note) {
+      saveUpdate(row, { note: draft }, true);
     }
   };
+
+  const closeNotePopover = () => {
+    const row = tabResults.find((r) => r.result_id === openNoteId) ?? results.find((r) => r.result_id === openNoteId);
+    if (row) flushNoteSave(row);
+    setOpenNoteId(null);
+  };
+
+  useEffect(() => {
+    if (!openNoteId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        closeNotePopover();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openNoteId, noteDrafts]);
 
   return (
     <div>
@@ -108,7 +123,7 @@ export function UniversityManagementPage() {
           (isAdmin
             ? '관리자는 모든 참여대학의 증빙 제출 여부와 비고를 수정할 수 있습니다.'
             : `${user?.university_name}의 증빙 제출 여부와 비고를 입력·수정할 수 있습니다.`) +
-          ' 목표값·실적값은 구글시트에서 직접 수정하며, 이 화면에서는 조회만 가능합니다.'
+          ' 목표값·실적값은 구글시트에서 직접 수정하며, 이 화면에서는 조회만 가능합니다. 변경 사항은 자동 저장됩니다.'
         }
       />
 
@@ -147,15 +162,14 @@ export function UniversityManagementPage() {
                 <th className="whitespace-nowrap px-3 py-2 text-right">달성률</th>
                 <th className="whitespace-nowrap px-3 py-2">증빙 제출 여부</th>
                 <th className="whitespace-nowrap px-3 py-2">비고</th>
-                <th className="whitespace-nowrap px-3 py-2 text-center">저장</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {!isLoading && tabResults.map((r) => {
                 const ind = indicatorMap.get(r.indicator_id);
-                const edit = editState[r.result_id];
-                if (!edit) return null;
                 const hasActual = r.actual_result !== null && r.actual_result !== undefined;
+                const isNoteOpen = openNoteId === r.result_id;
+                const draft = noteDrafts[r.result_id] ?? '';
                 return (
                   <tr key={r.result_id} className="align-top hover:bg-gray-50">
                     <td className="min-w-[200px] px-3 py-2 text-gray-800">{ind?.indicator_name ?? r.indicator_id}</td>
@@ -173,45 +187,45 @@ export function UniversityManagementPage() {
                     </td>
                     <td className="whitespace-nowrap px-3 py-2">
                       <select
-                        value={edit.evidence_status}
-                        onChange={(e) => updateField(r.result_id, 'evidence_status', e.target.value)}
+                        value={r.evidence_status === '예' || r.evidence_status === '아니오' ? r.evidence_status : '아니오'}
+                        onChange={(e) => handleEvidenceChange(r, e.target.value as EvidenceStatus)}
                         className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
                       >
                         <option value="예">예</option>
                         <option value="아니오">아니오</option>
                       </select>
                     </td>
-                    <td className="px-3 py-2">
-                      {edit.noteOpen ? (
-                        <input
-                          type="text"
-                          autoFocus
-                          value={edit.note}
-                          onChange={(e) => updateField(r.result_id, 'note', e.target.value)}
-                          placeholder="비고 입력"
-                          className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => updateField(r.result_id, 'noteOpen', true)}
-                          className="inline-flex items-center gap-1 rounded-md border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-navy-400 hover:text-navy-600"
-                        >
-                          <Pencil className="h-3 w-3" />
-                          {edit.note ? edit.note : '비고'}
-                        </button>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-center">
+                    <td className="relative px-3 py-2">
                       <button
                         type="button"
-                        disabled={!edit.dirty || savingId === r.result_id}
-                        onClick={() => handleSave(r)}
-                        className="inline-flex items-center gap-1 rounded-md bg-navy-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-navy-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                        onClick={() => setOpenNoteId(r.result_id)}
+                        className="inline-flex max-w-[160px] items-center gap-1 rounded-md border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-navy-400 hover:text-navy-600"
                       >
-                        <Save className="h-3.5 w-3.5" />
-                        {savingId === r.result_id ? '저장 중' : '저장'}
+                        <Pencil className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{r.note ? r.note : '비고'}</span>
                       </button>
+
+                      {isNoteOpen && (
+                        <div
+                          ref={popoverRef}
+                          className="absolute left-0 top-full z-20 mt-1 w-64 rounded-md border border-gray-200 bg-white p-3 shadow-lg"
+                        >
+                          <p className="mb-1.5 text-xs font-semibold text-gray-500">비고</p>
+                          <textarea
+                            autoFocus
+                            value={draft}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setNoteDrafts((prev) => ({ ...prev, [r.result_id]: value }));
+                              scheduleNoteSave(r, value);
+                            }}
+                            placeholder="비고를 입력하세요"
+                            rows={3}
+                            className="w-full resize-none rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-navy-500 focus:outline-none focus:ring-1 focus:ring-navy-500"
+                          />
+                          <p className="mt-1 text-[11px] text-gray-400">바깥을 클릭하면 자동 저장됩니다.</p>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
