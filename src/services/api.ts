@@ -152,6 +152,7 @@ export interface UpdateUniversityResultPayload {
   updated_by: string;
   user_name: string;
   university_name: string;
+  role: 'admin' | 'university';
 }
 
 export async function updateUniversityResult(
