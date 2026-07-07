@@ -202,13 +202,13 @@ export function UniversityManagementPage() {
                         className="inline-flex max-w-[160px] items-center gap-1 rounded-md border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-navy-400 hover:text-navy-600"
                       >
                         <Pencil className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{r.note ? r.note : '비고'}</span>
+                        <span className="min-w-0 truncate">{r.note ? r.note : '비고'}</span>
                       </button>
 
                       {isNoteOpen && (
                         <div
                           ref={popoverRef}
-                          className="absolute left-0 top-full z-20 mt-1 w-64 rounded-md border border-gray-200 bg-white p-3 shadow-lg"
+                          className="absolute right-0 top-full z-20 mt-1 w-64 rounded-md border border-gray-200 bg-white p-3 shadow-lg"
                         >
                           <p className="mb-1.5 text-xs font-semibold text-gray-500">비고</p>
                           <textarea
