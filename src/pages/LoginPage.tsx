@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, LogIn, Info } from 'lucide-react';
+import { ShieldCheck, LogIn } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export function LoginPage() {
@@ -22,11 +22,6 @@ export function LoginPage() {
     } else {
       setError(res.message ?? '로그인에 실패했습니다.');
     }
-  };
-
-  const fillTestAccount = (testEmail: string, testPassword: string) => {
-    setEmail(testEmail);
-    setPassword(testPassword);
   };
 
   return (
@@ -79,33 +74,6 @@ export function LoginPage() {
               {isSubmitting ? '로그인 중...' : '로그인'}
             </button>
           </form>
-
-          <div className="mt-6 rounded-md border border-navy-100 bg-navy-50/60 p-3.5">
-            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-navy-700">
-              <Info className="h-3.5 w-3.5" />
-              테스트 계정 안내 (클릭 시 자동 입력)
-            </p>
-            <ul className="space-y-1 text-xs text-gray-600">
-              <li>
-                <button
-                  type="button"
-                  className="underline decoration-dotted underline-offset-2 hover:text-navy-700"
-                  onClick={() => fillTestAccount('admin@coss.kangwon.ac.kr', 'admin1234')}
-                >
-                  관리자: admin@coss.kangwon.ac.kr / admin1234
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  className="underline decoration-dotted underline-offset-2 hover:text-navy-700"
-                  onClick={() => fillTestAccount('kw@coss.kangwon.ac.kr', 'kw1234')}
-                >
-                  대학 담당자(강원대): kw@coss.kangwon.ac.kr / kw1234
-                </button>
-              </li>
-            </ul>
-          </div>
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
