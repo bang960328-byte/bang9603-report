@@ -210,6 +210,55 @@ function writeEvidenceStatus_(payload) {
   }
 }
 
+// 대학별 배부·달성 관리 화면의 "비고"는 대학 탭 자체의 I열(그 대학이 자체적으로 쓰는 비고)과
+// 별개로 총괄시스템에서만 입력·조회한다. 대학 탭에는 전혀 쓰지 않고, 이 전용 시트에만 저장한다.
+function ensureDashboardNotesSheet_() {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName('dashboard_notes');
+  if (sheet) return sheet;
+  sheet = ss.insertSheet('dashboard_notes');
+  sheet.appendRow(['result_id', 'university_name', 'indicator_name', 'note', 'updated_by', 'updated_at']);
+  return sheet;
+}
+
+function readDashboardNotes_() {
+  const sheet = ensureDashboardNotesSheet_();
+  const values = sheet.getDataRange().getValues();
+  const map = {};
+  for (let r = 1; r < values.length; r++) {
+    const id = String(values[r][0] || '').trim();
+    if (id) map[id] = String(values[r][3] || '');
+  }
+  return map;
+}
+
+function writeDashboardNote_(payload) {
+  const sheet = ensureDashboardNotesSheet_();
+  const values = sheet.getDataRange().getValues();
+  const timestamp = nowTimestamp_();
+  let rowNumber = null;
+  for (let r = 1; r < values.length; r++) {
+    if (String(values[r][0]) === String(payload.result_id)) {
+      rowNumber = r + 1;
+      break;
+    }
+  }
+  if (rowNumber) {
+    sheet.getRange(rowNumber, 4).setValue(payload.note);
+    sheet.getRange(rowNumber, 5).setValue(payload.updated_by || '');
+    sheet.getRange(rowNumber, 6).setValue(timestamp);
+  } else {
+    sheet.appendRow([
+      payload.result_id,
+      payload.university_name || '',
+      payload.indicator_name || '',
+      payload.note,
+      payload.updated_by || '',
+      timestamp,
+    ]);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 총괄 탭: 지표별 "3차년도 전체 목표값"의 유일한 기준.
 // 대학별 탭의 F열(배부값) 합계는 배분 참고용일 뿐, 실제 3차 목표는 총괄 탭에서 가져온다.
@@ -330,6 +379,7 @@ function getOverviewActualMap_() {
 function buildAllUniversityResults_() {
   const { nameToId } = getIndicatorNameMap_();
   const evidenceMap = readEvidenceStatuses_();
+  const notesMap = readDashboardNotes_();
   const results = [];
 
   UNIVERSITY_SHEET_NAMES.forEach((sheetName) => {
@@ -353,7 +403,7 @@ function buildAllUniversityResults_() {
         actual_result: actual,
         achievement_rate: rate,
         evidence_status: evidenceMap[resultId] || '아니오',
-        note: r.note,
+        note: notesMap[resultId] || '',
         manager_name: r.manager,
         updated_by: r.manager || '',
         updated_at: '',
@@ -622,19 +672,8 @@ function getUniversityResults_(params) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. updateUniversityResult — 대학별 탭의 G열(실적)에 직접 반영
+// 4. updateUniversityResult
 // ---------------------------------------------------------------------------
-function findIndicatorRowNumber_(sheet, indicatorName) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < DATA_START_ROW) return null;
-  const names = sheet.getRange(DATA_START_ROW, COL.NAME + 1, lastRow - DATA_START_ROW + 1, 1).getValues();
-  const targetKey = normalizeIndicatorName_(indicatorName);
-  for (let i = 0; i < names.length; i++) {
-    if (normalizeIndicatorName_(String(names[i][0] || '')) === targetKey) return DATA_START_ROW + i;
-  }
-  return null;
-}
-
 function parseResultId_(resultId) {
   const sheetName = UNIVERSITY_SHEET_NAMES.filter((s) => resultId.indexOf(s + '__') === 0)[0];
   if (!sheetName) return null;
@@ -643,7 +682,7 @@ function parseResultId_(resultId) {
 }
 
 // 목표값(F열)·실적값(G열)은 대시보드에서 더 이상 수정할 수 없다 — 구글시트에서 직접 입력해야
-// 하며, 이 함수는 비고(I열)와 증빙 제출 여부만 저장한다.
+// 하며, 이 함수는 비고(총괄시스템 전용 시트)와 증빙 제출 여부만 저장한다.
 function updateUniversityResult_(payload) {
   const parsed = parseResultId_(payload.result_id);
   if (!parsed) return { success: false, message: '대상 실적 데이터를 찾을 수 없습니다.' };
@@ -652,24 +691,28 @@ function updateUniversityResult_(payload) {
   const indicatorName = idToName[parsed.indicatorId];
   if (!indicatorName) return { success: false, message: '지표를 찾을 수 없습니다.' };
 
-  const sheet = getSpreadsheet_().getSheetByName(parsed.sheetName);
-  const rowNumber = findIndicatorRowNumber_(sheet, indicatorName);
-  if (!rowNumber) return { success: false, message: '해당 대학 탭에서 지표 행을 찾을 수 없습니다.' };
+  const displayName = SHEET_TO_DISPLAY_NAME[parsed.sheetName];
+  // 대학 담당자는 본인 대학의 실적만 수정할 수 있다 (관리자는 전체 가능).
+  if (payload.role === 'university' && payload.university_name !== displayName) {
+    return { success: false, message: '해당 대학의 데이터만 수정할 수 있습니다.' };
+  }
 
   const timestamp = nowTimestamp_();
-  const displayName = SHEET_TO_DISPLAY_NAME[parsed.sheetName];
 
-  // 비고(I열) 저장 — 화면에서 읽어오는 것과 같은 열에 그대로 기록한다.
+  // 비고 — 대학 탭에는 쓰지 않고 총괄시스템 전용 시트(dashboard_notes)에만 저장한다.
   if (payload.note !== undefined) {
-    const before = sheet.getRange(rowNumber, COL.NOTE + 1).getValue();
-    if (String(before) !== String(payload.note)) {
-      sheet.getRange(rowNumber, COL.NOTE + 1).setValue(payload.note);
-      appendLog_({
-        timestamp: timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: displayName,
-        action: 'update', sheet_name: parsed.sheetName, row_id: indicatorName,
-        field_name: '비고(I열)', old_value: before, new_value: payload.note,
-      });
-    }
+    writeDashboardNote_({
+      result_id: payload.result_id,
+      university_name: displayName,
+      indicator_name: indicatorName,
+      note: payload.note,
+      updated_by: payload.updated_by,
+    });
+    appendLog_({
+      timestamp: timestamp, user_id: payload.updated_by, user_name: payload.user_name, university_name: displayName,
+      action: 'update', sheet_name: 'dashboard_notes', row_id: indicatorName,
+      field_name: '비고', old_value: '', new_value: payload.note,
+    });
   }
 
   // 증빙 제출 여부(예/아니오) — 실제 시트에는 없는 값이라 별도의 evidence_status 시트에 저장한다.
