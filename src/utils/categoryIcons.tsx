@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { CSSProperties, ComponentType } from 'react';
 import {
   GraduationCap,
   BookOpen,
@@ -16,7 +16,7 @@ import {
   Layers,
 } from 'lucide-react';
 
-type IconComponent = ComponentType<{ className?: string }>;
+type IconComponent = ComponentType<{ className?: string; style?: CSSProperties }>;
 
 // 지표 대분류 이름에 포함된 키워드로 아이콘을 매칭한다 (실제 시트 문구가 조금씩 달라도
 // 대응하도록 정확한 이름이 아닌 키워드 포함 여부로 판단). 위에서부터 먼저 매칭되는 규칙이 적용된다.
