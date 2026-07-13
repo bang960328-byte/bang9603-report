@@ -422,6 +422,13 @@ function isRateAverageCategory_(category) {
   return RATE_AVERAGE_CATEGORY_KEYS.indexOf(String(category || '').replace(/\s+/g, '')) !== -1;
 }
 
+// 자율지표 대분류 — 대학혁신부터가 자율지표, 그 앞은 전부 핵심지표
+const AUTONOMOUS_CATEGORY_KEYS = ['대학혁신', '지역혁신', '산업혁신', '글로벌혁신'];
+
+function isAutonomousCategory_(category) {
+  return AUTONOMOUS_CATEGORY_KEYS.indexOf(String(category || '').replace(/\s+/g, '')) !== -1;
+}
+
 function buildIndicatorSummaries_() {
   const { canonical } = getIndicatorNameMap_();
   const results = buildAllUniversityResults_();
@@ -631,21 +638,24 @@ function getDashboardData_() {
     .map((s) => ({ indicator_name: s.indicator_name, rate: s.achievement_rate, category: s.category }))
     .sort((a, b) => b.rate - a.rate);
 
-  const evidenceStatusCounts = ['예', '아니오', '해당없음'].map((status) => ({
-    status: status,
-    count: results.filter((r) => r.evidence_status === status).length,
-  }));
+  const coreRates = summaries.filter((s) => !isAutonomousCategory_(s.category) && s.achievement_rate !== null).map((s) => s.achievement_rate);
+  const autonomousRates = summaries.filter((s) => isAutonomousCategory_(s.category) && s.achievement_rate !== null).map((s) => s.achievement_rate);
+
+  const evidenceApplicable = results.filter((r) => r.evidence_status !== '해당없음');
+  const evidenceSubmittedRate = evidenceApplicable.length > 0
+    ? Math.round((evidenceApplicable.filter((r) => r.evidence_status === '예').length / evidenceApplicable.length) * 1000) / 10
+    : 100;
 
   return {
     totalIndicators: summaries.length,
-    categoryCount: categories.length,
     averageAchievementRate: average_(rates),
     underAchievedCount: summaries.filter((s) => s.status === '미달').length,
-    evidenceMissingCount: results.filter((r) => r.evidence_status === '아니오').length,
+    coreAverageRate: average_(coreRates),
+    autonomousAverageRate: average_(autonomousRates),
+    evidenceSubmittedRate: evidenceSubmittedRate,
     categoryBreakdown: categoryBreakdown,
     universityRates: universityRates,
     indicatorRanking: indicatorRanking,
-    evidenceStatusCounts: evidenceStatusCounts,
   };
 }
 
