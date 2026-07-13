@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { ChevronDown, ChevronUp, Sparkles, Target } from 'lucide-react';
+import { getCategoryIcon } from '@/utils/categoryIcons';
 
 interface RankingDatum {
   indicator_name: string;
@@ -55,69 +56,106 @@ function average(nums: number[]): number {
   return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10;
 }
 
-function CategoryBarGroup({
+function CategoryRow({
+  data,
+  isOpen,
+  onToggle,
+  expandedItems,
+}: {
+  data: CategoryDatum;
+  isOpen: boolean;
+  onToggle: () => void;
+  expandedItems: RankingDatum[];
+}) {
+  const Icon = getCategoryIcon(data.category);
+  const achieved = data.rate >= 100;
+  const color = achieved ? ACHIEVED_COLOR : UNDER_COLOR;
+  const barWidth = Math.min(100, data.rate);
+
+  return (
+    <div className="rounded-lg border border-gray-100 bg-white transition-shadow hover:shadow-sm">
+      <button type="button" onClick={onToggle} className="flex w-full items-center gap-3 p-3 text-left">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+          style={{ backgroundColor: achieved ? '#eaf2fc' : '#fde8ec' }}
+        >
+          <Icon className="h-5 w-5" style={{ color }} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate text-sm font-medium text-gray-800">{data.category}</p>
+            <span className="shrink-0 text-sm font-bold" style={{ color }}>
+              {data.rate}%
+            </span>
+          </div>
+          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${barWidth}%`, backgroundColor: color }}
+            />
+          </div>
+        </div>
+        <span className="shrink-0 text-gray-300">
+          {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </span>
+      </button>
+
+      {isOpen && (
+        <div className="border-t border-gray-100 bg-gray-50/60 px-3 py-2">
+          <p className="mb-1 px-1 text-xs font-semibold text-gray-500">세부 지표 {expandedItems.length}개</p>
+          <div className="divide-y divide-gray-100">
+            {expandedItems.map((d) => (
+              <div key={d.indicator_name} className="flex items-center justify-between gap-3 px-1 py-1.5">
+                <p className="min-w-0 truncate text-sm text-gray-700">{d.indicator_name}</p>
+                <span
+                  className="shrink-0 text-sm font-semibold"
+                  style={{ color: d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR }}
+                >
+                  {d.rate}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CategoryGroup({
   title,
+  icon: GroupIcon,
   categoryData,
   expanded,
   onToggle,
   expandedItems,
 }: {
   title: string;
+  icon: typeof Target;
   categoryData: CategoryDatum[];
   expanded: string | null;
   onToggle: (category: string) => void;
-  expandedItems: (RankingDatum & { short: string })[];
+  expandedItems: RankingDatum[];
 }) {
   if (categoryData.length === 0) return null;
-  const axisMax = Math.ceil((Math.max(120, ...categoryData.map((d) => d.rate)) + 15) / 10) * 10;
-  const expandedAxisMax =
-    expandedItems.length > 0 ? Math.ceil((Math.max(120, ...expandedItems.map((d) => d.rate)) + 15) / 10) * 10 : 120;
-  const isExpandedHere = expanded !== null && categoryData.some((d) => d.category === expanded);
 
   return (
     <div>
-      <p className="mb-2 text-xs font-semibold text-gray-500">{title}</p>
-      <ResponsiveContainer width="100%" height={Math.max(160, categoryData.length * 34)}>
-        <BarChart data={categoryData} layout="vertical" margin={{ top: 0, right: 36, left: 8, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e1e0d9" horizontal={false} />
-          <XAxis type="number" domain={[0, axisMax]} tick={{ fontSize: 11, fill: '#898781' }} axisLine={false} tickLine={false} unit="%" />
-          <YAxis type="category" dataKey="category" width={160} interval={0} tick={{ fontSize: 11, fill: '#0b0b0b' }} axisLine={false} tickLine={false} />
-          <Tooltip
-            formatter={(value, _name, item) => [`${value}% (지표 ${item.payload.count}개)`, '평균 달성률']}
-            contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: '#e1e0d9' }}
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-500">
+        <GroupIcon className="h-3.5 w-3.5" />
+        {title}
+      </p>
+      <div className="space-y-2">
+        {categoryData.map((d) => (
+          <CategoryRow
+            key={d.category}
+            data={d}
+            isOpen={expanded === d.category}
+            onToggle={() => onToggle(d.category)}
+            expandedItems={expanded === d.category ? expandedItems : []}
           />
-          <Bar dataKey="rate" radius={[0, 4, 4, 0]} maxBarSize={20} cursor="pointer" onClick={(entry) => onToggle(entry.category)}>
-            {categoryData.map((d) => (
-              <Cell key={d.category} fill={d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR} />
-            ))}
-            <LabelList dataKey="rate" position="right" formatter={(v: number) => `${v}%`} style={{ fontSize: 11, fill: '#0b0b0b' }} />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-
-      {isExpandedHere && (
-        <div className="mt-3 border-t border-gray-100 pt-3">
-          <p className="mb-2 text-xs font-semibold text-gray-500">{expanded} · 세부 지표 {expandedItems.length}개</p>
-          <ResponsiveContainer width="100%" height={Math.max(160, expandedItems.length * 30)}>
-            <BarChart data={expandedItems} layout="vertical" margin={{ top: 0, right: 36, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e1e0d9" horizontal={false} />
-              <XAxis type="number" domain={[0, expandedAxisMax]} tick={{ fontSize: 11, fill: '#898781' }} axisLine={false} tickLine={false} unit="%" />
-              <YAxis type="category" dataKey="short" width={140} interval={0} tick={{ fontSize: 11, fill: '#0b0b0b' }} axisLine={false} tickLine={false} />
-              <Tooltip
-                formatter={(value) => [`${value}%`, '달성률']}
-                labelFormatter={(_label, payload) => payload?.[0]?.payload?.indicator_name ?? ''}
-                contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: '#e1e0d9' }}
-              />
-              <Bar dataKey="rate" radius={[0, 4, 4, 0]} maxBarSize={16}>
-                {expandedItems.map((d) => (
-                  <Cell key={d.indicator_name} fill={d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR} />
-                ))}
-                <LabelList dataKey="rate" position="right" formatter={(v: number) => `${v}%`} style={{ fontSize: 10, fill: '#0b0b0b' }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
@@ -157,13 +195,7 @@ export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
 
   const expandedItems = useMemo(() => {
     if (!expanded) return [];
-    return [...data]
-      .filter((d) => d.category === expanded)
-      .sort((a, b) => b.rate - a.rate)
-      .map((d) => ({
-        ...d,
-        short: d.indicator_name.length > 16 ? `${d.indicator_name.slice(0, 16)}…` : d.indicator_name,
-      }));
+    return [...data].filter((d) => d.category === expanded).sort((a, b) => b.rate - a.rate);
   }, [data, expanded]);
 
   const toggle = (category: string) => setExpanded((prev) => (prev === category ? null : category));
@@ -171,7 +203,7 @@ export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
   return (
     <div className="space-y-6" ref={containerRef}>
       <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400">
-        <span>막대를 클릭하면 지수 내 세부 지표가 아래에 펼쳐집니다.</span>
+        <span>행을 클릭하면 지수 내 세부 지표가 펼쳐집니다.</span>
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: ACHIEVED_COLOR }} />
           100% 이상
@@ -181,15 +213,17 @@ export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
           100% 미만
         </span>
       </div>
-      <CategoryBarGroup
+      <CategoryGroup
         title="핵심지표"
+        icon={Target}
         categoryData={coreCategories}
         expanded={expanded}
         onToggle={toggle}
         expandedItems={expandedItems}
       />
-      <CategoryBarGroup
+      <CategoryGroup
         title="자율지표"
+        icon={Sparkles}
         categoryData={autonomousCategories}
         expanded={expanded}
         onToggle={toggle}
