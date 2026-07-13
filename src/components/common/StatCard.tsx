@@ -25,7 +25,7 @@ export function StatCard({ label, value, unit, icon: Icon, tone = 'default' }: S
         <Icon className={`h-6 w-6 ${style.icon}`} strokeWidth={2.25} />
       </div>
       <div className="min-w-0">
-        <p className="truncate text-xs font-medium text-gray-500">{label}</p>
+        <p className="text-xs font-medium leading-tight text-gray-500">{label}</p>
         <p className="mt-0.5 text-2xl font-bold text-gray-900">
           {value}
           {unit && <span className="ml-1 text-sm font-normal text-gray-500">{unit}</span>}
