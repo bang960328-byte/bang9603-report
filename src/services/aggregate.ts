@@ -8,6 +8,7 @@ import type {
   UniversityResult,
 } from '@/types';
 import { calculateAchievementRate, getAchievementStatus, average } from '@/utils/calculations';
+import { isAutonomousCategory } from '@/utils/categoryClassification';
 
 /**
  * indicators + targets + university_results 원본 시트 데이터를 결합해
@@ -96,7 +97,21 @@ export function buildDashboardData(
   });
 
   const underAchievedCount = summaries.filter((s) => s.status === '미달').length;
-  const evidenceMissingCount = results.filter((r) => r.evidence_status === '아니오').length;
+
+  const coreRates = summaries
+    .filter((s) => !isAutonomousCategory(s.category))
+    .map((s) => s.achievement_rate)
+    .filter((r): r is number => r !== null);
+  const autonomousRates = summaries
+    .filter((s) => isAutonomousCategory(s.category))
+    .map((s) => s.achievement_rate)
+    .filter((r): r is number => r !== null);
+
+  const evidenceApplicable = results.filter((r) => r.evidence_status !== '해당없음');
+  const evidenceSubmittedRate =
+    evidenceApplicable.length > 0
+      ? Math.round((evidenceApplicable.filter((r) => r.evidence_status === '예').length / evidenceApplicable.length) * 1000) / 10
+      : 100;
 
   const universityNames = Array.from(new Set(results.map((r) => r.university_name)));
   const universityRates = universityNames.map((uni) => {
@@ -114,21 +129,16 @@ export function buildDashboardData(
     }))
     .sort((a, b) => b.rate - a.rate);
 
-  const evidenceStatusCounts = (['예', '아니오', '해당없음'] as const).map((status) => ({
-    status,
-    count: results.filter((r) => r.evidence_status === status).length,
-  }));
-
   return {
     totalIndicators: summaries.length,
-    categoryCount: categories.length,
     averageAchievementRate: average(ratesWithValue),
     underAchievedCount,
-    evidenceMissingCount,
+    coreAverageRate: coreRates.length > 0 ? average(coreRates) : 0,
+    autonomousAverageRate: autonomousRates.length > 0 ? average(autonomousRates) : 0,
+    evidenceSubmittedRate,
     categoryBreakdown,
     universityRates,
     indicatorRanking,
-    evidenceStatusCounts,
   };
 }
 
