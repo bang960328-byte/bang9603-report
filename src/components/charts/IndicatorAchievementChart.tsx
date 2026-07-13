@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Sparkles, Target } from 'lucide-react';
+import { ChevronDown, Sparkles, Target } from 'lucide-react';
 import { getCategoryIcon } from '@/utils/categoryIcons';
 
 interface RankingDatum {
@@ -58,66 +58,99 @@ function average(nums: number[]): number {
 
 function CategoryRow({
   data,
+  items,
   isOpen,
   onToggle,
-  expandedItems,
 }: {
   data: CategoryDatum;
+  items: RankingDatum[];
   isOpen: boolean;
   onToggle: () => void;
-  expandedItems: RankingDatum[];
 }) {
   const Icon = getCategoryIcon(data.category);
   const achieved = data.rate >= 100;
   const color = achieved ? ACHIEVED_COLOR : UNDER_COLOR;
   const barWidth = Math.min(100, data.rate);
+  const achievedCount = items.filter((d) => d.rate >= 100).length;
+  const underCount = items.length - achievedCount;
 
   return (
-    <div className="rounded-lg border border-gray-100 bg-white transition-shadow hover:shadow-sm">
-      <button type="button" onClick={onToggle} className="flex w-full items-center gap-3 p-3 text-left">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-          style={{ backgroundColor: achieved ? '#eaf2fc' : '#fde8ec' }}
-        >
-          <Icon className="h-5 w-5" style={{ color }} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <p className="truncate text-sm font-medium text-gray-800">{data.category}</p>
-            <span className="shrink-0 text-sm font-bold" style={{ color }}>
-              {data.rate}%
-            </span>
+    <div className="relative rounded-lg border border-gray-100 bg-white transition-shadow hover:shadow-sm">
+      <div className="group/row relative">
+        <button type="button" onClick={onToggle} className="flex w-full items-center gap-3 p-3 text-left">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover/row:scale-105"
+            style={{ backgroundColor: achieved ? '#eaf2fc' : '#fde8ec' }}
+          >
+            <Icon className="h-5 w-5" style={{ color }} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-sm font-medium text-gray-800">{data.category}</p>
+              <span className="shrink-0 text-sm font-bold" style={{ color }}>
+                {data.rate}%
+              </span>
+            </div>
+            <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${barWidth}%`, backgroundColor: color }}
+              />
+            </div>
           </div>
-          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-100">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{ width: `${barWidth}%`, backgroundColor: color }}
-            />
-          </div>
-        </div>
-        <span className="shrink-0 text-gray-300">
-          {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </span>
-      </button>
+          <span className={`shrink-0 text-gray-300 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+            <ChevronDown className="h-4 w-4" />
+          </span>
+        </button>
 
-      {isOpen && (
-        <div className="border-t border-gray-100 bg-gray-50/60 px-3 py-2">
-          <p className="mb-1 px-1 text-xs font-semibold text-gray-500">세부 지표 {expandedItems.length}개</p>
-          <div className="divide-y divide-gray-100">
-            {expandedItems.map((d) => (
-              <div key={d.indicator_name} className="flex items-center justify-between gap-3 px-1 py-1.5">
-                <p className="min-w-0 truncate text-sm text-gray-700">{d.indicator_name}</p>
-                <span
-                  className="shrink-0 text-sm font-semibold"
-                  style={{ color: d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR }}
-                >
-                  {d.rate}%
+        {/* 호버 시 간략 정보 툴팁 (펼쳐진 상태에서는 이미 세부 목록이 보이므로 숨김) */}
+        {!isOpen && (
+          <div className="pointer-events-none absolute left-3 top-full z-30 mt-1 w-56 origin-top-left scale-95 rounded-md border border-gray-100 bg-white p-2.5 text-xs opacity-0 shadow-lg transition-all duration-150 group-hover/row:scale-100 group-hover/row:opacity-100">
+            <p className="font-semibold text-gray-700">{data.category}</p>
+            <div className="mt-1 flex items-center justify-between text-gray-500">
+              <span>세부 지표</span>
+              <span className="font-medium text-gray-700">{items.length}개</span>
+            </div>
+            <div className="mt-0.5 flex items-center justify-between">
+              <span className="text-gray-500">달성 / 미달</span>
+              <span>
+                <span className="font-medium" style={{ color: ACHIEVED_COLOR }}>
+                  {achievedCount}
                 </span>
-              </div>
-            ))}
+                <span className="text-gray-400"> / </span>
+                <span className="font-medium" style={{ color: UNDER_COLOR }}>
+                  {underCount}
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div
+        className={`grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out ${
+          isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="min-h-0">
+          <div className="border-t border-gray-100 bg-gray-50/60 px-3 py-2">
+            <p className="mb-1 px-1 text-xs font-semibold text-gray-500">세부 지표 {items.length}개</p>
+            <div className="divide-y divide-gray-100">
+              {items.map((d) => (
+                <div key={d.indicator_name} className="flex items-center justify-between gap-3 px-1 py-1.5">
+                  <p className="min-w-0 truncate text-sm text-gray-700">{d.indicator_name}</p>
+                  <span
+                    className="shrink-0 text-sm font-semibold"
+                    style={{ color: d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR }}
+                  >
+                    {d.rate}%
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -126,16 +159,16 @@ function CategoryGroup({
   title,
   icon: GroupIcon,
   categoryData,
+  itemsByCategory,
   expanded,
   onToggle,
-  expandedItems,
 }: {
   title: string;
   icon: typeof Target;
   categoryData: CategoryDatum[];
+  itemsByCategory: Map<string, RankingDatum[]>;
   expanded: string | null;
   onToggle: (category: string) => void;
-  expandedItems: RankingDatum[];
 }) {
   if (categoryData.length === 0) return null;
 
@@ -150,9 +183,9 @@ function CategoryGroup({
           <CategoryRow
             key={d.category}
             data={d}
+            items={itemsByCategory.get(d.category) ?? []}
             isOpen={expanded === d.category}
             onToggle={() => onToggle(d.category)}
-            expandedItems={expanded === d.category ? expandedItems : []}
           />
         ))}
       </div>
@@ -175,12 +208,16 @@ export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [expanded]);
 
-  const { coreCategories, autonomousCategories } = useMemo(() => {
+  const { coreCategories, autonomousCategories, itemsByCategory } = useMemo(() => {
     const grouped = new Map<string, number[]>();
+    const itemsMap = new Map<string, RankingDatum[]>();
     data.forEach((d) => {
       if (!grouped.has(d.category)) grouped.set(d.category, []);
       grouped.get(d.category)!.push(d.rate);
+      if (!itemsMap.has(d.category)) itemsMap.set(d.category, []);
+      itemsMap.get(d.category)!.push(d);
     });
+    itemsMap.forEach((items) => items.sort((a, b) => b.rate - a.rate));
     const all = Array.from(grouped.entries()).map(([category, rates]) => ({
       category,
       rate: average(rates),
@@ -190,20 +227,16 @@ export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
     return {
       coreCategories: all.filter((d) => !isAutonomousCategory(d.category)).sort(byCanonicalOrder),
       autonomousCategories: all.filter((d) => isAutonomousCategory(d.category)).sort(byCanonicalOrder),
+      itemsByCategory: itemsMap,
     };
   }, [data]);
-
-  const expandedItems = useMemo(() => {
-    if (!expanded) return [];
-    return [...data].filter((d) => d.category === expanded).sort((a, b) => b.rate - a.rate);
-  }, [data, expanded]);
 
   const toggle = (category: string) => setExpanded((prev) => (prev === category ? null : category));
 
   return (
     <div className="space-y-6" ref={containerRef}>
       <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400">
-        <span>행을 클릭하면 지수 내 세부 지표가 펼쳐집니다.</span>
+        <span>행을 클릭하면 지수 내 세부 지표가 펼쳐지고, 커서를 올리면 요약 정보가 표시됩니다.</span>
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: ACHIEVED_COLOR }} />
           100% 이상
@@ -217,17 +250,17 @@ export function IndicatorAchievementChart({ data }: { data: RankingDatum[] }) {
         title="핵심지표"
         icon={Target}
         categoryData={coreCategories}
+        itemsByCategory={itemsByCategory}
         expanded={expanded}
         onToggle={toggle}
-        expandedItems={expandedItems}
       />
       <CategoryGroup
         title="자율지표"
         icon={Sparkles}
         categoryData={autonomousCategories}
+        itemsByCategory={itemsByCategory}
         expanded={expanded}
         onToggle={toggle}
-        expandedItems={expandedItems}
       />
     </div>
   );
