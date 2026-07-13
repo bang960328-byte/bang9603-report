@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Sparkles, Target } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Sparkles, Target, TriangleAlert } from 'lucide-react';
 import { getCategoryIcon } from '@/utils/categoryIcons';
 
 interface RankingDatum {
@@ -137,11 +137,30 @@ function CategoryRow({
             <p className="mb-1 px-1 text-xs font-semibold text-gray-500">세부 지표 {items.length}개</p>
             <div className="divide-y divide-gray-100">
               {items.map((d) => (
-                <div key={d.indicator_name} className="flex items-center justify-between gap-3 px-1 py-1.5">
-                  <p className="min-w-0 truncate text-sm text-gray-700">{d.indicator_name}</p>
+                <div key={d.indicator_name} className="flex items-center gap-3 px-1 py-2">
+                  {d.rate >= 100 ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" style={{ color: ACHIEVED_COLOR }} />
+                  ) : (
+                    <TriangleAlert className="h-3.5 w-3.5 shrink-0" style={{ color: UNDER_COLOR }} />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-gray-700">{d.indicator_name}</p>
+                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-gray-200">
+                      <div
+                        className="h-full rounded-full transition-all duration-500 ease-out"
+                        style={{
+                          width: `${Math.min(100, d.rate)}%`,
+                          backgroundColor: d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR,
+                        }}
+                      />
+                    </div>
+                  </div>
                   <span
-                    className="shrink-0 text-sm font-semibold"
-                    style={{ color: d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR }}
+                    className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold"
+                    style={{
+                      color: d.rate >= 100 ? ACHIEVED_COLOR : UNDER_COLOR,
+                      backgroundColor: d.rate >= 100 ? '#eaf2fc' : '#fde8ec',
+                    }}
                   >
                     {d.rate}%
                   </span>
