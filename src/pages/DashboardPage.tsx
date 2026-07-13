@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { ListChecks, Layers, Gauge, AlertTriangle, FileWarning } from 'lucide-react';
 import { StatCard } from '@/components/common/StatCard';
 import { Card } from '@/components/common/Card';
-import { RiskBadge } from '@/components/common/StatusBadge';
 import { UniversityComparisonChart } from '@/components/charts/UniversityComparisonChart';
 import { IndicatorAchievementChart } from '@/components/charts/IndicatorAchievementChart';
 import { EvidenceStatusChart } from '@/components/charts/EvidenceStatusChart';
+import { UrgentIndicatorsPanel } from '@/components/dashboard/UrgentIndicatorsPanel';
 import { getDashboardData, getPriorityIndicators } from '@/services/api';
 import type { DashboardData, PriorityIndicator } from '@/types';
 import { formatNumber, formatRate } from '@/utils/format';
@@ -22,7 +22,7 @@ export function DashboardPage() {
     if (!user) return;
     const [dashboard, priority] = await Promise.all([getDashboardData(), getPriorityIndicators(user)]);
     setData(dashboard);
-    setPriorities(priority.slice(0, 5));
+    setPriorities(priority);
     setIsLoading(false);
   }, [user]);
 
@@ -54,33 +54,13 @@ export function DashboardPage() {
         <UniversityComparisonChart data={data.universityRates} />
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card title="증빙 제출 현황" className="lg:col-span-1">
-          <EvidenceStatusChart data={data.evidenceStatusCounts} />
-        </Card>
+      <Card title="증빙 제출 현황">
+        <EvidenceStatusChart data={data.evidenceStatusCounts} />
+      </Card>
 
-        <Card title="우선 관리 필요 지표" description="위험도 높은 순 5건" className="lg:col-span-2">
-          <div className="divide-y divide-gray-100">
-            {priorities.length === 0 && (
-              <p className="py-6 text-center text-sm text-gray-400">우선 관리가 필요한 지표가 없습니다.</p>
-            )}
-            {priorities.map((p, idx) => (
-              <div key={idx} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <RiskBadge level={p.risk_level} />
-                    <p className="truncate text-sm font-medium text-gray-800">{p.indicator_name}</p>
-                  </div>
-                  <p className="mt-0.5 truncate text-xs text-gray-500">
-                    {p.category} · {p.reason}
-                  </p>
-                </div>
-                <span className="shrink-0 text-sm font-semibold text-gray-700">{formatRate(p.achievement_rate)}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+      <Card title="미달·주의 관리" description="달성률 80% 미만 지표를 긴급/주의로 나눠 조치사항을 바로 기록할 수 있습니다.">
+        <UrgentIndicatorsPanel items={priorities} />
+      </Card>
     </div>
   );
 }
