@@ -122,14 +122,14 @@ export interface IndicatorSummary {
 // 대시보드 데이터
 export interface DashboardData {
   totalIndicators: number;
-  categoryCount: number;
   averageAchievementRate: number;
   underAchievedCount: number;
-  evidenceMissingCount: number;
+  coreAverageRate: number;
+  autonomousAverageRate: number;
+  evidenceSubmittedRate: number;
   categoryBreakdown: { category: string; count: number; averageRate: number | null }[];
   universityRates: { university_name: string; rate: number }[];
   indicatorRanking: { indicator_name: string; rate: number; category: IndicatorCategory }[];
-  evidenceStatusCounts: { status: EvidenceStatus; count: number }[];
 }
 
 // 우선 관리 지표 (지표별 집계 — 5개 대학 목표값·실적값 합산)
