@@ -1,5 +1,6 @@
 import type { AchievementStatus, EvidenceStatus, RiskLevel } from '@/types';
 import { EVIDENCE_COLOR_MAP, RISK_COLOR_MAP, STATUS_COLOR_MAP } from '@/utils/calculations';
+import { getCategoryIcon } from '@/utils/categoryIcons';
 
 export function StatusBadge({ status }: { status: AchievementStatus }) {
   return (
@@ -52,10 +53,12 @@ function categoryStyle(category: string): string {
 }
 
 export function CategoryBadge({ category }: { category: string }) {
+  const Icon = getCategoryIcon(category);
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${categoryStyle(category)}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${categoryStyle(category)}`}
     >
+      <Icon className="h-3 w-3 shrink-0" />
       {category}
     </span>
   );
