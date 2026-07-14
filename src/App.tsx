@@ -28,7 +28,14 @@ export default function App() {
             >
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/indicators" element={<IndicatorsOverviewPage />} />
-              <Route path="/indicators/detail" element={<IndicatorCategoryDetailPage />} />
+              <Route
+                path="/indicators/detail"
+                element={
+                  <ProtectedRoute adminOnly>
+                    <IndicatorCategoryDetailPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/university-results" element={<UniversityManagementPage />} />
               <Route path="/priority" element={<PriorityIndicatorsPage />} />
               <Route
