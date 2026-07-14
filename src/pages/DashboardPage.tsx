@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ListChecks, Gauge, AlertTriangle, FileCheck2, Target, Sparkles } from 'lucide-react';
+import { Gauge, AlertTriangle, FileCheck2, Target, Sparkles } from 'lucide-react';
 import { StatCard } from '@/components/common/StatCard';
 import { Card } from '@/components/common/Card';
 import { UniversityComparisonChart } from '@/components/charts/UniversityComparisonChart';
@@ -37,8 +37,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-6">
-        <StatCard label="전체 성과지표" value={formatNumber(data.totalIndicators)} unit="개" icon={ListChecks} />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-5">
         <StatCard label="전체 평균 달성률" value={formatRate(data.averageAchievementRate)} icon={Gauge} tone="success" />
         <StatCard label="미달성 지표" value={formatNumber(data.underAchievedCount)} unit="개" icon={AlertTriangle} tone="danger" />
         <StatCard label="증빙 제출 현황" value={formatRate(data.evidenceSubmittedRate)} icon={FileCheck2} tone="warning" />
