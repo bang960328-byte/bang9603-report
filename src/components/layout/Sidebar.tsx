@@ -21,7 +21,7 @@ interface MenuItem {
 const MENU_ITEMS: MenuItem[] = [
   { to: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { to: '/indicators', label: '성과지표 총괄 현황', icon: ListChecks },
-  { to: '/indicators/detail', label: '지표 대분류별 상세', icon: Layers },
+  { to: '/indicators/detail', label: '지표 대분류별 상세', icon: Layers, adminOnly: true },
   { to: '/university-results', label: '대학별 배부·달성 관리', icon: Building2 },
   { to: '/priority', label: '우선 관리 지표', icon: AlertTriangle },
   { to: '/users', label: '사용자 관리', icon: Users, adminOnly: true },
