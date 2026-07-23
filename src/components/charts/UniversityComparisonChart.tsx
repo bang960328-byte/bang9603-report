@@ -25,9 +25,13 @@ const UNIVERSITY_COLOR: Record<string, string> = {
 };
 
 export function UniversityComparisonChart({ data }: { data: UniversityRateDatum[] }) {
+  // 라벨(예: "121.8%")이 차트 상단에서 잘리지 않도록, 실제 최대값보다 여유를 두고 Y축 상한을 잡는다.
+  const maxRate = Math.max(100, ...data.map((d) => d.rate));
+  const yDomainMax = Math.ceil((maxRate * 1.2) / 10) * 10;
+
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+      <BarChart data={data} margin={{ top: 24, right: 16, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e1e0d9" vertical={false} />
         <XAxis
           dataKey="university_name"
@@ -39,7 +43,7 @@ export function UniversityComparisonChart({ data }: { data: UniversityRateDatum[
           tick={{ fontSize: 12, fill: '#898781' }}
           axisLine={false}
           tickLine={false}
-          domain={[0, 120]}
+          domain={[0, yDomainMax]}
           unit="%"
         />
         <Tooltip
