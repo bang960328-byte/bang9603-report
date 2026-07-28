@@ -566,6 +566,39 @@ function debugOverviewWide_(params) {
   return { last_row: lastRow, last_col: lastCol, start_row: startRow, end_row: endRow, rows: rows };
 }
 
+// debugOverviewWide_와 같은 방식이지만 임의의 시트(대학별 탭 등)를 대상으로 한다.
+// 특정 대학 탭에서 왜 특정 지표 행이 안 읽히는지(달성지표 구분선 위치, 지표명 표기 차이 등)
+// 확인할 때 쓴다.
+// ?action=debugSheetWide&sheetName=충남대학교&startRow=1&endRow=100 (행 범위 생략 시 전체)
+function debugSheetWide_(params) {
+  const sheetName = params && params.sheetName;
+  if (!sheetName) {
+    return { message: 'sheetName 파라미터가 필요합니다.', example: '?action=debugSheetWide&sheetName=충남대학교' };
+  }
+  const sheet = getSpreadsheet_().getSheetByName(sheetName);
+  if (!sheet) return { message: '시트를 찾을 수 없습니다: ' + sheetName };
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  const startRow = params.startRow ? Number(params.startRow) : 1;
+  const endRow = Math.min(lastRow, params.endRow ? Number(params.endRow) : lastRow);
+  if (startRow < 1 || endRow < startRow) return { message: '유효하지 않은 행 범위입니다.', lastRow: lastRow, lastCol: lastCol };
+
+  const numRows = endRow - startRow + 1;
+  const values = sheet.getRange(startRow, 1, numRows, lastCol).getValues();
+
+  const rows = values.map((row, idx) => {
+    const cells = [];
+    row.forEach((cell, c) => {
+      const str = String(cell === null || cell === undefined ? '' : cell).trim();
+      if (str !== '') cells.push({ col: columnIndexToLetter_(c), value: cell });
+    });
+    return { sheet_row: startRow + idx, cells: cells };
+  });
+
+  return { sheet_name: sheetName, last_row: lastRow, last_col: lastCol, start_row: startRow, end_row: endRow, rows: rows };
+}
+
 // 특정 지표의 대학별 실적 합산 과정을 그대로 보여준다. 총괄 탭의 대학별 배부값·달성값과
 // 대조해서 어느 대학 탭에서 실적/목표가 잘못 읽히는지 찾을 때 쓴다.
 // ?action=debugIndicatorDetail&indicatorId=IND28 또는 &name=컨소 간 대학 간 연계 교과목 이수자 수
@@ -1011,6 +1044,8 @@ function routeAction_(action, params) {
       return { success: true, data: debugNameMatch_() };
     case 'debugOverviewWide':
       return { success: true, data: debugOverviewWide_(params) };
+    case 'debugSheetWide':
+      return { success: true, data: debugSheetWide_(params) };
     case 'debugIndicatorDetail':
       return { success: true, data: debugIndicatorDetail_(params) };
     default:
